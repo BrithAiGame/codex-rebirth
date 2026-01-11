@@ -114,7 +114,7 @@ const generateProceduralLayout = (rng: SeededRNG, doors: Room['doors']): number[
   return createEmptyTemplate();
 }
 
-export const generateDungeon = (floorLevel: number, seed: number, targetRoomCount: number): Room[] => {
+export const generateDungeon = (floorLevel: number, seed: number, targetRoomCount: number, fixedThemeId?: number): Room[] => {
   const rng = new SeededRNG(seed);
   const rooms: Room[] = [];
   
@@ -194,7 +194,7 @@ export const generateDungeon = (floorLevel: number, seed: number, targetRoomCoun
         layout = generateProceduralLayout(rng, doors);
     }
 
-    const themeId = Math.floor(rng.next() * ROOM_THEMES.length);
+    const themeId = fixedThemeId !== undefined ? fixedThemeId : Math.floor(rng.next() * ROOM_THEMES.length);
     rooms.push({
       x: cr.x,
       y: cr.y,

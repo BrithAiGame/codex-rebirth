@@ -6,6 +6,7 @@ import {
 } from './types';
 import { uuid, checkAABB, distance, normalizeVector, SeededRNG } from './utils';
 import { generateDungeon, carveDoors } from './dungeon';
+import { ROOM_THEMES } from './config/themes';
 import { AssetLoader } from './assets';
 import * as THREE from 'three';
 
@@ -42,6 +43,8 @@ export class GameEngine {
 
   // Selected Character
   characterId: string = 'alpha';
+  floorThemeId: number | null = null;
+  floorThemeLabel: string | null = null;
 
   // Callback to sync React UI
   onUiUpdate: (stats: any) => void;
@@ -116,8 +119,11 @@ export class GameEngine {
     // Deterministic seed for this floor based on run seed
     const floorSeed = this.baseSeed + (level * 1000); 
     const roomCount = this.calculateRoomCount(level);
-    
-    this.dungeon = generateDungeon(level, floorSeed, roomCount);
+    const themeSeed = new SeededRNG(floorSeed + 12345);
+    const fixedThemeId = level <= 5 ? Math.floor(themeSeed.next() * ROOM_THEMES.length) : undefined;
+    this.floorThemeId = fixedThemeId !== undefined ? fixedThemeId : null;
+    this.floorThemeLabel = fixedThemeId !== undefined ? (ROOM_THEMES[fixedThemeId]?.label || '???') : '???';
+    this.dungeon = generateDungeon(level, floorSeed, roomCount, fixedThemeId);
     
     const startRoom = this.dungeon.find(r => r.type === 'START');
     if (startRoom) {
@@ -456,6 +462,7 @@ export class GameEngine {
           hp: this.player.stats.hp,
           maxHp: this.player.stats.maxHp,
           floor: this.floorLevel,
+          themeName: this.floorThemeLabel,
           score: this.score,
           seed: this.baseSeed,
           items: this.player.inventory.length,

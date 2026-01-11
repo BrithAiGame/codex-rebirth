@@ -227,6 +227,7 @@ export default function App() {
     dungeon: {x:number, y:number, type: string, visited: boolean}[];
     currentRoomPos: {x:number, y:number};
     stats?: GameStats; nearbyItem?: any; boss?: any;
+    themeName?: string | null;
     restartTimer?: number;
     inventory?: ItemType[];
   } | null>(null);
@@ -483,6 +484,7 @@ export default function App() {
   }`;
 
   const stats = gameStats?.stats;
+  const floorThemeLabel = gameStats?.themeName || '???';
   const fireRate = stats ? Math.max(0.1, Math.round((60 / stats.fireRate) * 10) / 10) : null;
   const range = stats ? Math.round(stats.range) : null;
   const speed = stats ? Math.round(stats.speed * 10) / 10 : null;
@@ -515,7 +517,9 @@ export default function App() {
             {isInGame && (
                 <>
                     <div className="flex items-baseline gap-2">
-                        <span className="text-amber-500 font-black text-2xl md:text-3xl tracking-tighter">{t('FLOOR')} {gameStats?.floor || 1}</span>
+                        <span className="text-amber-500 font-black text-2xl md:text-3xl tracking-tighter">
+                            第{gameStats?.floor || 1}层【{(gameStats?.floor || 1) <= 5 ? floorThemeLabel : '???'}】
+                        </span>
                     </div>
                     <div className="text-gray-400 font-bold text-sm md:text-base tracking-widest">{gameStats?.score || 0}</div>
                 </>

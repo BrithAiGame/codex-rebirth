@@ -1,6 +1,7 @@
 export interface RoomTheme {
   id: number;
   name: string;
+  label: string;
   wallSprite: string;
   floorSprite: string;
   rockSprite: string;
@@ -16,6 +17,7 @@ export const ROOM_THEMES: RoomTheme[] = [
   {
     id: 0,
     name: 'crypt',
+    label: '幽冥墓室',
     wallSprite: 'WALL_VARIANT_0',
     floorSprite: 'FLOOR_VARIANT_0',
     rockSprite: 'ROCK_VARIANT_0',
@@ -29,6 +31,7 @@ export const ROOM_THEMES: RoomTheme[] = [
   {
     id: 1,
     name: 'ember',
+    label: '赤焰熔窟',
     wallSprite: 'WALL_VARIANT_1',
     floorSprite: 'FLOOR_VARIANT_1',
     rockSprite: 'ROCK_VARIANT_1',
@@ -42,6 +45,7 @@ export const ROOM_THEMES: RoomTheme[] = [
   {
     id: 2,
     name: 'moss',
+    label: '苔影密林',
     wallSprite: 'WALL_VARIANT_2',
     floorSprite: 'FLOOR_VARIANT_2',
     rockSprite: 'ROCK_VARIANT_2',
@@ -55,6 +59,7 @@ export const ROOM_THEMES: RoomTheme[] = [
   {
     id: 3,
     name: 'frost',
+    label: '寒霜回廊',
     wallSprite: 'WALL_VARIANT_3',
     floorSprite: 'FLOOR_VARIANT_3',
     rockSprite: 'ROCK_VARIANT_3',
@@ -68,6 +73,7 @@ export const ROOM_THEMES: RoomTheme[] = [
   {
     id: 4,
     name: 'royal',
+    label: '曜石圣殿',
     wallSprite: 'WALL_VARIANT_0',
     floorSprite: 'FLOOR_VARIANT_2',
     rockSprite: 'ROCK_VARIANT_1',
@@ -81,6 +87,7 @@ export const ROOM_THEMES: RoomTheme[] = [
   {
     id: 5,
     name: 'toxic',
+    label: '毒雾禁域',
     wallSprite: 'WALL_VARIANT_1',
     floorSprite: 'FLOOR_VARIANT_0',
     rockSprite: 'ROCK_VARIANT_2',
@@ -94,6 +101,7 @@ export const ROOM_THEMES: RoomTheme[] = [
   {
     id: 6,
     name: 'ash',
+    label: '灰烬深井',
     wallSprite: 'WALL_VARIANT_2',
     floorSprite: 'FLOOR_VARIANT_1',
     rockSprite: 'ROCK_VARIANT_3',
@@ -107,6 +115,7 @@ export const ROOM_THEMES: RoomTheme[] = [
   {
     id: 7,
     name: 'abyss',
+    label: '深渊裂隙',
     wallSprite: 'WALL_VARIANT_3',
     floorSprite: 'FLOOR_VARIANT_3',
     rockSprite: 'ROCK_VARIANT_0',
@@ -120,6 +129,7 @@ export const ROOM_THEMES: RoomTheme[] = [
   {
     id: 8,
     name: 'saffron',
+    label: '鎏金遗迹',
     wallSprite: 'WALL_VARIANT_1',
     floorSprite: 'FLOOR_VARIANT_2',
     rockSprite: 'ROCK_VARIANT_1',
@@ -133,6 +143,7 @@ export const ROOM_THEMES: RoomTheme[] = [
   {
     id: 9,
     name: 'tide',
+    label: '潮汐遗堡',
     wallSprite: 'WALL_VARIANT_0',
     floorSprite: 'FLOOR_VARIANT_3',
     rockSprite: 'ROCK_VARIANT_2',
