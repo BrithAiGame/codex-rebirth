@@ -147,9 +147,15 @@ export class GameEngine {
         room.cleared = true;
     }
 
-    // Ensure cleared rooms have open physical doors (updates collision map)
+    // Carve doorways so the opening is visible; collision is controlled by doorAnim state.
+    carveDoors(room.layout, room.doors);
+
     if (room.cleared) {
-        carveDoors(room.layout, room.doors);
+        room.doorAnim = { state: 'open', t: 1 };
+    } else if (room.type === 'START') {
+        room.doorAnim = { state: 'open', t: 1 };
+    } else {
+        room.doorAnim = { state: 'closing', t: 1 };
     }
 
     // Clear dynamic entities
@@ -232,6 +238,7 @@ export class GameEngine {
         if (enemies.length === 0) {
             room.cleared = true;
             carveDoors(room.layout, room.doors);
+            room.doorAnim = { state: 'open', t: 1 };
         }
     }
 
@@ -518,6 +525,18 @@ export class GameEngine {
         }
     }
 
+    if (this.currentRoom?.doorAnim) {
+        const doorAnim = this.currentRoom.doorAnim;
+        const doorSpeed = 0.04;
+        if (doorAnim.state === 'closing') {
+            doorAnim.t = Math.max(0, doorAnim.t - doorSpeed);
+            if (doorAnim.t <= 0) doorAnim.state = 'closed';
+        } else if (doorAnim.state === 'opening') {
+            doorAnim.t = Math.min(1, doorAnim.t + doorSpeed);
+            if (doorAnim.t >= 1) doorAnim.state = 'open';
+        }
+    }
+
     // --- Player Logic ---
     if (input.move.x !== 0 || input.move.y !== 0) {
         this.player.velocity.x = input.move.x * this.player.stats.speed;
@@ -548,6 +567,10 @@ export class GameEngine {
     if (this.currentRoom && !this.currentRoom.cleared && roomIsClear) {
         this.currentRoom.cleared = true;
         carveDoors(this.currentRoom.layout, this.currentRoom.doors);
+        if (this.currentRoom.doorAnim && this.currentRoom.doorAnim.state !== 'open') {
+            this.currentRoom.doorAnim.state = 'opening';
+            this.currentRoom.doorAnim.t = Math.max(0, this.currentRoom.doorAnim.t);
+        }
         
         // Spawn rewards
         if (Math.random() < 0.10) {
@@ -568,7 +591,7 @@ export class GameEngine {
         }
     }
 
-    if (this.currentRoom && this.currentRoom.cleared) {
+    if (this.currentRoom && this.currentRoom.doorAnim?.state === 'open') {
         this.checkDoorCollisions();
     }
 
@@ -1186,6 +1209,7 @@ export class GameEngine {
       if (!this.currentRoom) return false;
       const layout = this.currentRoom.layout;
       const ts = CONSTANTS.TILE_SIZE;
+      const doorOpen = this.currentRoom.doorAnim?.state === 'open' || (!this.currentRoom.doorAnim && this.currentRoom.cleared);
       
       const startX = Math.floor(ent.x / ts);
       const endX = Math.floor((ent.x + ent.w - 0.01) / ts);
@@ -1199,6 +1223,7 @@ export class GameEngine {
               const tile = layout[y][x];
               // 1 = Wall, 2 = Rock
               if (tile === 1 || tile === 2) return true;
+              if (tile === 3 && !doorOpen) return true;
           }
       }
 
@@ -1216,7 +1241,7 @@ export class GameEngine {
   }
 
   checkDoorCollisions() {
-      if (!this.currentRoom || !this.currentRoom.cleared) return;
+      if (!this.currentRoom || this.currentRoom.doorAnim?.state !== 'open') return;
       const ts = CONSTANTS.TILE_SIZE;
       const cx = this.player.x + this.player.w / 2;
       const cy = this.player.y + this.player.h / 2;

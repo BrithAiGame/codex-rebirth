@@ -411,14 +411,18 @@ const EntityGroup: React.FC<{ entity: Entity, engine: GameEngine }> = React.memo
     // 3. Trapdoors: Flat
     if (entity.type === EntityType.TRAPDOOR) {
          return (
-             <group ref={groupRef} rotation={[-Math.PI/2, 0, 0]} position={[0, 0.02, 0]}>
-                 <mesh receiveShadow>
-                     <planeGeometry args={[width, height]} />
+             <group ref={groupRef}>
+                 <mesh position={[0, 0.06, 0]} rotation={[-Math.PI/2, 0, 0]} receiveShadow>
+                     <ringGeometry args={[width * 0.35, width * 0.5, 24]} />
+                     <meshStandardMaterial color="#1f2937" />
+                 </mesh>
+                 <mesh position={[0, 0.02, 0]} rotation={[-Math.PI/2, 0, 0]}>
+                     <circleGeometry args={[width * 0.35, 24]} />
                      <meshStandardMaterial color="#000" />
                  </mesh>
-                 <mesh position={[0,0,-0.05]}>
-                     <boxGeometry args={[width, height, 0.1]} />
-                     <meshStandardMaterial color="#222" />
+                 <mesh position={[0, -0.4, 0]}>
+                     <cylinderGeometry args={[width * 0.34, width * 0.34, 0.8, 24, 1, true]} />
+                     <meshStandardMaterial color="#050505" side={THREE.DoubleSide} />
                  </mesh>
              </group>
          );
@@ -488,18 +492,65 @@ const DungeonMesh: React.FC<{ engine: GameEngine, assets: AssetLoader }> = React
     });
 
     // Doors
-    if (!room.cleared) {
-        const createGate = (x: number, z: number, rotY: number, key: string) => (
-            <mesh key={key} position={[x, 0.75, z]} rotation={[0, rotY, 0]} castShadow>
-                <boxGeometry args={[1, 1.5, 0.2]} />
-                <meshStandardMaterial color="#3f2e18" />
-            </mesh>
-        );
+    const doorOpenT = room.doorAnim
+        ? (room.doorAnim.state === 'open' ? 1 : room.doorAnim.state === 'closed' ? 0 : room.doorAnim.t)
+        : (room.cleared ? 1 : 0);
 
-        if (room.doors.UP) wallMeshes.push(createGate(0, -((ROOM_HEIGHT-1)/2) + 0.5, 0, 'gate-u'));
-        if (room.doors.DOWN) wallMeshes.push(createGate(0, ((ROOM_HEIGHT-1)/2) - 0.5, 0, 'gate-d'));
-        if (room.doors.LEFT) wallMeshes.push(createGate(-((ROOM_WIDTH-1)/2) + 0.5, 0, Math.PI/2, 'gate-l'));
-        if (room.doors.RIGHT) wallMeshes.push(createGate(((ROOM_WIDTH-1)/2) - 0.5, 0, Math.PI/2, 'gate-r'));
+    const createShutterDoor = (x: number, z: number, rotY: number, key: string) => {
+        const doorWidth = 3;
+        const doorHeight = 1;
+        const frameDepth = 0.18;
+        const frameThickness = 0.1;
+        const panelWidth = doorWidth / 2;
+        const panelHeight = doorHeight - frameThickness;
+        const openShift = (doorWidth / 2) + (panelWidth / 2) - 0.05;
+        const closedShift = panelWidth / 2;
+        const panelShift = closedShift + (openShift - closedShift) * doorOpenT;
+        const indicatorColor = doorOpenT > 0.95 ? '#22c55e' : '#ef4444';
+
+        return (
+            <group key={`door-${key}`} position={[x, 0.5, z]} rotation={[0, rotY, 0]}>
+                <mesh castShadow receiveShadow position={[0, (doorHeight / 2) - (frameThickness / 2), 0]}>
+                    <boxGeometry args={[doorWidth + frameThickness * 2, frameThickness, frameDepth]} />
+                    <meshStandardMaterial color={CONSTANTS.PALETTE.DOOR_FRAME} />
+                </mesh>
+                <mesh castShadow receiveShadow position={[-(doorWidth / 2) - (frameThickness / 2), 0, 0]}>
+                    <boxGeometry args={[frameThickness, doorHeight, frameDepth]} />
+                    <meshStandardMaterial color={CONSTANTS.PALETTE.DOOR_FRAME} />
+                </mesh>
+                <mesh castShadow receiveShadow position={[(doorWidth / 2) + (frameThickness / 2), 0, 0]}>
+                    <boxGeometry args={[frameThickness, doorHeight, frameDepth]} />
+                    <meshStandardMaterial color={CONSTANTS.PALETTE.DOOR_FRAME} />
+                </mesh>
+
+                <mesh castShadow receiveShadow position={[-panelShift, 0, 0]}>
+                    <boxGeometry args={[panelWidth, panelHeight, 0.08]} />
+                    <meshStandardMaterial color={CONSTANTS.PALETTE.DOOR_LOCKED} />
+                </mesh>
+                <mesh castShadow receiveShadow position={[panelShift, 0, 0]}>
+                    <boxGeometry args={[panelWidth, panelHeight, 0.08]} />
+                    <meshStandardMaterial color={CONSTANTS.PALETTE.DOOR_LOCKED} />
+                </mesh>
+
+                <mesh position={[0, (doorHeight / 2) - 0.18, frameDepth / 2 + 0.04]}>
+                    <boxGeometry args={[0.22, 0.12, 0.06]} />
+                    <meshStandardMaterial color={indicatorColor} emissive={indicatorColor} emissiveIntensity={0.8} />
+                </mesh>
+            </group>
+        );
+    };
+
+    if (room.doors.UP) {
+        wallMeshes.push(createShutterDoor(0, -((ROOM_HEIGHT-1)/2) + 0.5, 0, 'u'));
+    }
+    if (room.doors.DOWN) {
+        wallMeshes.push(createShutterDoor(0, ((ROOM_HEIGHT-1)/2) - 0.5, 0, 'd'));
+    }
+    if (room.doors.LEFT) {
+        wallMeshes.push(createShutterDoor(-((ROOM_WIDTH-1)/2) + 0.5, 0, Math.PI/2, 'l'));
+    }
+    if (room.doors.RIGHT) {
+        wallMeshes.push(createShutterDoor(((ROOM_WIDTH-1)/2) - 0.5, 0, Math.PI/2, 'r'));
     }
 
     return (

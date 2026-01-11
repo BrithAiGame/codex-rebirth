@@ -173,6 +173,7 @@ export interface Room {
   visited: boolean;
   seed: number; // Deterministic seed for room events
   themeId?: number; // Visual theme
+  doorAnim?: { state: 'closing' | 'closed' | 'opening' | 'open'; t: number };
   savedEntities?: Entity[]; // Persist items, pedestals, trapdoors
 }
 

@@ -239,6 +239,8 @@ export default function App() {
   const [menuSelection, setMenuSelection] = useState(0); 
   const [settingsSelection, setSettingsSelection] = useState(0);
   const [selectedCharIndex, setSelectedCharIndex] = useState(0);
+  const [floorTransition, setFloorTransition] = useState<{ phase: 'in' | 'out'; key: number } | null>(null);
+  const floorRef = useRef<number | null>(null);
 
   const [settings, setSettings] = useState<Settings>(() => {
     // Mobile detection logic for initial state
@@ -326,6 +328,23 @@ export default function App() {
   }, []);
 
   useEffect(() => { if (inputRef.current) inputRef.current.updateKeyMap(settings.keyMap); }, [settings.keyMap]);
+
+  useEffect(() => {
+    const currentFloor = gameStats?.floor ?? null;
+    if (currentFloor === null) return;
+    if (floorRef.current === null) {
+        floorRef.current = currentFloor;
+        return;
+    }
+    if (floorRef.current !== currentFloor) {
+        floorRef.current = currentFloor;
+        const transitionKey = Date.now();
+        setFloorTransition({ phase: 'out', key: transitionKey });
+        const toIn = setTimeout(() => setFloorTransition({ phase: 'in', key: transitionKey }), 1000);
+        const toClear = setTimeout(() => setFloorTransition(null), 2000);
+        return () => { clearTimeout(toIn); clearTimeout(toClear); };
+    }
+  }, [gameStats?.floor]);
 
   // Key Rebinding Listener
   useEffect(() => {
@@ -548,6 +567,12 @@ export default function App() {
                     className="relative shadow-2xl overflow-hidden bg-black border-4 border-neutral-800" 
                     style={{ width: displayDims.width, height: displayDims.height }}
                   >
+                        {floorTransition && (
+                            <div
+                                key={floorTransition.key}
+                                className={`mosaic-overlay ${floorTransition.phase === 'out' ? 'mosaic-in' : 'mosaic-out'}`}
+                            />
+                        )}
                         <Canvas
                             orthographic
                             shadows
@@ -856,6 +881,27 @@ export default function App() {
         .custom-scrollbar::-webkit-scrollbar-track { background: #111; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
         .fps-stats { position: absolute !important; top: 0px !important; left: 0px !important; z-index: 100; transform: scale(1.2); transform-origin: top left; }
+        .mosaic-overlay {
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          background-image:
+            linear-gradient(rgba(0,0,0,0.45) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(0,0,0,0.45) 1px, transparent 1px);
+          background-size: 6px 6px;
+          opacity: 0;
+          z-index: 70;
+        }
+        .mosaic-in { animation: mosaicIn 1s steps(6) forwards; }
+        .mosaic-out { animation: mosaicOut 1s steps(6) forwards; }
+        @keyframes mosaicIn {
+          0% { opacity: 0; background-size: 4px 4px; }
+          100% { opacity: 1; background-size: 24px 24px; }
+        }
+        @keyframes mosaicOut {
+          0% { opacity: 1; background-size: 24px 24px; }
+          100% { opacity: 0; background-size: 4px 4px; }
+        }
       `}</style>
     </div>
   );
