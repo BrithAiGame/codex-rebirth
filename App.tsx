@@ -167,30 +167,45 @@ const CameraRig = () => {
 };
 
 // Main Loop
-const GameLoop: React.FC<{ engine: GameEngine, input: React.MutableRefObject<InputManager | null>, joyMove: React.MutableRefObject<Vector2>, joyShoot: React.MutableRefObject<Vector2> }> = ({ engine, input, joyMove, joyShoot }) => {
+const GameLoop: React.FC<{ engine: GameEngine, input: React.MutableRefObject<InputManager | null>, joyMove: React.MutableRefObject<Vector2>, joyShoot: React.MutableRefObject<Vector2>, fpsLock: 30 | 60 }> = ({ engine, input, joyMove, joyShoot, fpsLock }) => {
     const { invalidate } = useThree();
     useEffect(() => {
+        const frameInterval = 1000 / fpsLock;
+        let lastTime = performance.now();
+        let accumulator = 0;
         const loop = () => {
-            if (input.current) {
-                if (engine.status === GameStatus.PLAYING) {
-                    const kbMove = input.current.getMovementVector();
-                    const kbShoot = input.current.getShootingDirection();
-                    const move = {
-                        x: (Math.abs(kbMove.x) > 0 ? kbMove.x : joyMove.current.x),
-                        y: (Math.abs(kbMove.y) > 0 ? kbMove.y : joyMove.current.y)
-                    };
-                    const shoot = (kbShoot && (Math.abs(kbShoot.x) > 0 || Math.abs(kbShoot.y) > 0)) ? kbShoot : (Math.abs(joyShoot.current.x) > 0.2 || Math.abs(joyShoot.current.y) > 0.2) ? joyShoot.current : null;
-                    const restart = input.current.isRestartPressed();
-                    const pause = input.current.isPausePressed();
-                    engine.update({ move, shoot, restart, pause });
+            const now = performance.now();
+            const delta = now - lastTime;
+            lastTime = now;
+            accumulator += delta;
+
+            let didUpdate = false;
+            let steps = 0;
+            while (accumulator >= frameInterval && steps < 2) {
+                if (input.current) {
+                    if (engine.status === GameStatus.PLAYING) {
+                        const kbMove = input.current.getMovementVector();
+                        const kbShoot = input.current.getShootingDirection();
+                        const move = {
+                            x: (Math.abs(kbMove.x) > 0 ? kbMove.x : joyMove.current.x),
+                            y: (Math.abs(kbMove.y) > 0 ? kbMove.y : joyMove.current.y)
+                        };
+                        const shoot = (kbShoot && (Math.abs(kbShoot.x) > 0 || Math.abs(kbShoot.y) > 0)) ? kbShoot : (Math.abs(joyShoot.current.x) > 0.2 || Math.abs(joyShoot.current.y) > 0.2) ? joyShoot.current : null;
+                        const restart = input.current.isRestartPressed();
+                        const pause = input.current.isPausePressed();
+                        engine.update({ move, shoot, restart, pause });
+                    }
                 }
+                accumulator -= frameInterval;
+                didUpdate = true;
+                steps++;
             }
-            invalidate();
+            if (didUpdate) invalidate();
             requestAnimationFrame(loop);
         };
         const id = requestAnimationFrame(loop);
         return () => cancelAnimationFrame(id);
-    }, [engine, input, joyMove, joyShoot, invalidate]);
+    }, [engine, input, joyMove, joyShoot, invalidate, fpsLock]);
     return null;
 };
 
@@ -199,6 +214,7 @@ const SETTING_ITEMS = [
     { id: 'lang', type: 'select' },
     { id: 'joystick', type: 'toggle' },
     { id: 'minimap', type: 'toggle' },
+    { id: 'fpsLock', type: 'select' },
     { id: 'fps', type: 'toggle' },
     { id: 'fullscreen', type: 'toggle' },
     // Keys follow after this...
@@ -209,6 +225,8 @@ const ORDERED_KEYS = [
     'shootUp', 'shootDown', 'shootLeft', 'shootRight', 
     'restart', 'pause', 'toggleFullscreen'
 ] as (keyof KeyMap)[];
+
+const SETTINGS_STORAGE_KEY = 'birth-settings';
 
 export default function App() {
   const engineRef = useRef<GameEngine | null>(null);
@@ -243,16 +261,38 @@ export default function App() {
   const floorRef = useRef<number | null>(null);
 
   const [settings, setSettings] = useState<Settings>(() => {
-    // Mobile detection logic for initial state
     const isMobile = typeof window !== 'undefined' && (window.innerWidth <= 768 || /Mobi|Android/i.test(navigator.userAgent));
-    return {
+    const baseSettings: Settings = {
         language: Language.ZH_CN,
         showMinimap: true,
-        showFPS: false, 
+        showFPS: false,
+        fpsLock: 60,
         isFullScreen: false,
-        enableJoysticks: isMobile, 
+        enableJoysticks: isMobile,
         keyMap: { ...DEFAULT_KEYMAP }
     };
+    if (typeof window === 'undefined') return baseSettings;
+
+    try {
+        const storedRaw = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
+        if (!storedRaw) return baseSettings;
+        const stored = JSON.parse(storedRaw);
+        const langValues = Object.values(Language);
+        const language = langValues.includes(stored.language) ? stored.language : baseSettings.language;
+        const fpsLock = stored.fpsLock === 30 ? 30 : 60;
+        return {
+            ...baseSettings,
+            language,
+            showMinimap: stored.showMinimap ?? baseSettings.showMinimap,
+            showFPS: stored.showFPS ?? baseSettings.showFPS,
+            fpsLock,
+            enableJoysticks: stored.enableJoysticks ?? baseSettings.enableJoysticks,
+            keyMap: { ...baseSettings.keyMap, ...(stored.keyMap || {}) },
+            isFullScreen: !!document.fullscreenElement
+        };
+    } catch {
+        return baseSettings;
+    }
   });
 
   const t = (key: string) => {
@@ -314,6 +354,11 @@ export default function App() {
     document.addEventListener('fullscreenchange', handleFsChange);
     return () => document.removeEventListener('fullscreenchange', handleFsChange);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+  }, [settings]);
 
   useEffect(() => {
     inputRef.current = new InputManager(settings.keyMap);
@@ -417,6 +462,9 @@ export default function App() {
                    const dir = e.code === 'ArrowLeft' ? -1 : 1;
                    setSettings(s => ({...s, language: langs[(idx + dir + langs.length) % langs.length]}));
                }
+               if (settingsSelection === 3 && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) {
+                   setSettings(s => ({...s, fpsLock: s.fpsLock === 60 ? 30 : 60}));
+               }
 
                if (isEnter) {
                    if (settingsSelection === 0) { // Lang
@@ -426,11 +474,12 @@ export default function App() {
                    }
                    else if (settingsSelection === 1) setSettings(s => ({...s, enableJoysticks: !s.enableJoysticks}));
                    else if (settingsSelection === 2) setSettings(s => ({...s, showMinimap: !s.showMinimap}));
-                   else if (settingsSelection === 3) setSettings(s => ({...s, showFPS: !s.showFPS}));
-                   else if (settingsSelection === 4) toggleFullScreen();
+                   else if (settingsSelection === 3) setSettings(s => ({...s, fpsLock: s.fpsLock === 60 ? 30 : 60}));
+                   else if (settingsSelection === 4) setSettings(s => ({...s, showFPS: !s.showFPS}));
+                   else if (settingsSelection === 5) toggleFullScreen();
                    // Key Bindings
-                   else if (settingsSelection >= 5 && settingsSelection < 5 + ORDERED_KEYS.length) {
-                       const keyIdx = settingsSelection - 5;
+                   else if (settingsSelection >= 6 && settingsSelection < 6 + ORDERED_KEYS.length) {
+                       const keyIdx = settingsSelection - 6;
                        setWaitingForKey(ORDERED_KEYS[keyIdx]);
                    }
                    // Close
@@ -442,8 +491,8 @@ export default function App() {
                if (isEsc) setShowSettings(false);
                
                // Auto-scroll logic for list
-               if (keyListRef.current && settingsSelection >= 5) {
-                   const listIndex = settingsSelection - 5;
+               if (keyListRef.current && settingsSelection >= 6) {
+                   const listIndex = settingsSelection - 6;
                    // Simple heuristic to scroll list
                    const element = keyListRef.current.children[listIndex] as HTMLElement;
                    if(element) element.scrollIntoView({block: "nearest"});
@@ -588,7 +637,7 @@ export default function App() {
                             {settings.showFPS && <Stats className="fps-stats" />}
                             {engineRef.current && (
                                 <>
-                                    <GameLoop engine={engineRef.current} input={inputRef} joyMove={joystickMoveRef} joyShoot={joystickShootRef} />
+                                <GameLoop engine={engineRef.current} input={inputRef} joyMove={joystickMoveRef} joyShoot={joystickShootRef} fpsLock={settings.fpsLock} />
                                     <GameScene engine={engineRef.current} />
                                 </>
                             )}
@@ -720,16 +769,26 @@ export default function App() {
                                             </div>
                                         </div>
 
-                                        {/* 3: FPS */}
-                                        <div className={`flex justify-between items-center p-2 rounded cursor-pointer ${settingsSelection === 3 ? 'bg-white/10 border border-white/50' : 'border border-transparent'}`} onClick={() => setSettings(s => ({...s, showFPS: !s.showFPS}))} onMouseEnter={() => setSettingsSelection(3)}>
+                                        {/* 3: FPS Lock */}
+                                        <div className={`flex justify-between items-center p-2 rounded cursor-pointer ${settingsSelection === 3 ? 'bg-white/10 border border-white/50' : 'border border-transparent'}`} onClick={() => setSettings(s => ({...s, fpsLock: s.fpsLock === 60 ? 30 : 60}))} onMouseEnter={() => setSettingsSelection(3)}>
+                                            <span className="text-gray-300 font-bold">{t('SETTING_FPS_LOCK')}</span>
+                                            <div className="flex gap-1">
+                                                {[30, 60].map(v => (
+                                                    <span key={v} className={`px-2 py-1 text-xs font-bold border rounded ${settings.fpsLock === v ? 'bg-white text-black' : 'text-gray-500 border-gray-700'}`}>{v}FPS</span>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* 4: FPS */}
+                                        <div className={`flex justify-between items-center p-2 rounded cursor-pointer ${settingsSelection === 4 ? 'bg-white/10 border border-white/50' : 'border border-transparent'}`} onClick={() => setSettings(s => ({...s, showFPS: !s.showFPS}))} onMouseEnter={() => setSettingsSelection(4)}>
                                             <span className="text-gray-300 font-bold">{t('SETTING_FPS')}</span>
                                             <div className={`w-6 h-6 border rounded flex items-center justify-center ${settings.showFPS ? 'bg-cyan-500 border-cyan-500' : 'border-gray-600'}`}>
                                                 {settings.showFPS && <div className="w-3 h-3 bg-white rounded-sm" />}
                                             </div>
                                         </div>
 
-                                        {/* 4: Fullscreen */}
-                                        <div className={`flex justify-between items-center p-2 rounded cursor-pointer ${settingsSelection === 4 ? 'bg-white/10 border border-white/50' : 'border border-transparent'}`} onClick={toggleFullScreen} onMouseEnter={() => setSettingsSelection(4)}>
+                                        {/* 5: Fullscreen */}
+                                        <div className={`flex justify-between items-center p-2 rounded cursor-pointer ${settingsSelection === 5 ? 'bg-white/10 border border-white/50' : 'border border-transparent'}`} onClick={toggleFullScreen} onMouseEnter={() => setSettingsSelection(5)}>
                                             <span className="text-gray-300 font-bold">{t('SETTING_FULLSCREEN')}</span>
                                             <div className={`w-6 h-6 border rounded flex items-center justify-center ${settings.isFullScreen ? 'bg-cyan-500 border-cyan-500' : 'border-gray-600'}`}>
                                                 {settings.isFullScreen && <div className="w-3 h-3 bg-white rounded-sm" />}
@@ -740,7 +799,7 @@ export default function App() {
                                         <div className="pt-2 border-t border-gray-700 mt-2">
                                             <div className="text-gray-500 text-xs font-bold uppercase mb-2">{t('SETTING_KEYS')}</div>
                                             {ORDERED_KEYS.map((key, idx) => {
-                                                const globalIdx = 5 + idx;
+                                                const globalIdx = 6 + idx;
                                                 const isActive = settingsSelection === globalIdx;
                                                 const isWaiting = waitingForKey === key;
                                                 return (
@@ -760,9 +819,9 @@ export default function App() {
                                     {/* Close Button */}
                                     <div className="mt-4 pt-2 border-t border-gray-700">
                                         <button 
-                                            className={`w-full py-3 font-bold border-2 transition-colors ${settingsSelection === (5 + ORDERED_KEYS.length) ? 'bg-white text-black border-white' : 'bg-transparent text-gray-400 border-gray-600'}`} 
+                                            className={`w-full py-3 font-bold border-2 transition-colors ${settingsSelection === (6 + ORDERED_KEYS.length) ? 'bg-white text-black border-white' : 'bg-transparent text-gray-400 border-gray-600'}`} 
                                             onClick={() => setShowSettings(false)}
-                                            onMouseEnter={() => setSettingsSelection(5 + ORDERED_KEYS.length)}
+                                            onMouseEnter={() => setSettingsSelection(6 + ORDERED_KEYS.length)}
                                         >
                                             {t('CLOSE')}
                                         </button>

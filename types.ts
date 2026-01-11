@@ -83,6 +83,7 @@ export interface Settings {
   language: Language;
   showMinimap: boolean;
   showFPS: boolean; // New Setting
+  fpsLock: 30 | 60;
   isFullScreen: boolean;
   enableJoysticks: boolean; // New Setting
   keyMap: KeyMap;
