@@ -488,7 +488,7 @@ export default function App() {
   const knockback = stats ? Math.round(stats.knockback * 10) / 10 : null;
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-[#050505] text-white select-none overflow-hidden" style={{ fontFamily: "'GameFontEn', 'GameFontZh', monospace" }}>
+    <div className="flex flex-col h-screen w-screen bg-[#050505] text-white select-none overflow-hidden" style={{ fontFamily: "'GameFontZh', monospace" }}>
       
       {/* HEADER */}
       <header className="flex-none h-16 bg-neutral-900 border-b border-gray-800 flex items-center justify-between px-4 z-50 shadow-md">
