@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { CONSTANTS } from './constants';
 import { SPRITES } from './sprites';
+import { ROOM_THEMES } from './config/themes';
 
 export type SpriteName = keyof typeof SPRITES;
 
@@ -101,6 +102,22 @@ export class AssetLoader {
     // Obstacles
     register('ROCK', this.createCanvas(SPRITES.ROCK,
       ['', P.ROCK_BASE, P.ROCK_HIGHLIGHT, '#000000'], CONSTANTS.TILE_SIZE));
+
+    // Theme Variants
+    ROOM_THEMES.forEach(theme => {
+      const wallSprite = SPRITES[theme.wallSprite as keyof typeof SPRITES] || SPRITES.WALL;
+      const floorSprite = SPRITES[theme.floorSprite as keyof typeof SPRITES] || SPRITES.FLOOR;
+      const rockSprite = SPRITES[theme.rockSprite as keyof typeof SPRITES] || SPRITES.ROCK;
+      const bgSprite = SPRITES[theme.bgSprite as keyof typeof SPRITES] || SPRITES.FLOOR;
+      register(`WALL_THEME_${theme.id}`, this.createCanvas(wallSprite,
+        ['', theme.wall.base, theme.wall.highlight, theme.wall.shadow], CONSTANTS.TILE_SIZE));
+      register(`FLOOR_THEME_${theme.id}`, this.createCanvas(floorSprite,
+        ['', theme.floor.base, theme.floor.var1, theme.floor.var2], CONSTANTS.TILE_SIZE));
+      register(`ROCK_THEME_${theme.id}`, this.createCanvas(rockSprite,
+        ['', theme.rock.base, theme.rock.highlight, theme.rock.shadow], CONSTANTS.TILE_SIZE));
+      register(`BG_THEME_${theme.id}`, this.createCanvas(bgSprite,
+        ['', theme.bg, theme.floor.var1, theme.wall.shadow], CONSTANTS.TILE_SIZE));
+    });
 
     // Player Characters
     register('PLAYER', this.createCanvas(SPRITES.PLAYER,

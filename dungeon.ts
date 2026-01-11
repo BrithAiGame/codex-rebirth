@@ -1,6 +1,7 @@
 import { CONSTANTS } from './constants';
 import { Room, Direction } from './types';
 import { SeededRNG } from './utils';
+import { ROOM_THEMES } from './config/themes';
 
 const GRID_SIZE = 10; // Virtual grid for dungeon layout
 const RW = 15; // Room Width in tiles
@@ -193,6 +194,7 @@ export const generateDungeon = (floorLevel: number, seed: number, targetRoomCoun
         layout = generateProceduralLayout(rng, doors);
     }
 
+    const themeId = Math.floor(rng.next() * ROOM_THEMES.length);
     rooms.push({
       x: cr.x,
       y: cr.y,
@@ -202,7 +204,8 @@ export const generateDungeon = (floorLevel: number, seed: number, targetRoomCoun
       itemCollected: false,
       layout,
       visited: false,
-      seed: rng.next() * 1000000 // Unique seed for this room
+      seed: rng.next() * 1000000, // Unique seed for this room
+      themeId
     });
   });
 

@@ -10,6 +10,7 @@ import { ENEMIES, BOSSES } from './config/enemies';
 import { ITEMS, DROPS } from './config/items';
 import { CHARACTERS } from './config/characters';
 import { SPRITES } from './sprites';
+import { ROOM_THEMES } from './config/themes';
 
 interface RendererProps {
   engine: GameEngine;
@@ -444,7 +445,11 @@ const DungeonMesh: React.FC<{ engine: GameEngine, assets: AssetLoader }> = React
     const room = engine.currentRoom;
     if (!room) return null;
 
-    const floorTex = assets.getTexture('FLOOR');
+    const theme = ROOM_THEMES[room.themeId ?? 0] || ROOM_THEMES[0];
+    const floorTex = assets.getTexture(`FLOOR_THEME_${theme.id}`) || assets.getTexture('FLOOR');
+    const wallTex = assets.getTexture(`WALL_THEME_${theme.id}`) || assets.getTexture('WALL');
+    const rockTex = assets.getTexture(`ROCK_THEME_${theme.id}`) || assets.getTexture('ROCK');
+    const bgTex = assets.getTexture(`BG_THEME_${theme.id}`) || null;
 
     // Floor Plane
     const floorMeshes: React.ReactNode[] = [];
@@ -460,7 +465,7 @@ const DungeonMesh: React.FC<{ engine: GameEngine, assets: AssetLoader }> = React
             floorMeshes.push(
                 <mesh key={`f-${key}`} position={[x, 0, z]} rotation={[-Math.PI/2, 0, 0]} receiveShadow>
                     <planeGeometry args={[1, 1]} />
-                    <meshStandardMaterial map={floorTex} color={tile === 3 ? "#2d3748" : "#666"} />
+                    <meshStandardMaterial map={floorTex} color={tile === 3 ? theme.wall.shadow : "#ffffff"} />
                 </mesh>
             );
 
@@ -468,14 +473,14 @@ const DungeonMesh: React.FC<{ engine: GameEngine, assets: AssetLoader }> = React
                 wallMeshes.push(
                     <mesh key={`w-${key}`} position={[x, 0.5, z]} castShadow receiveShadow>
                         <boxGeometry args={[1, 1, 1]} />
-                        <meshStandardMaterial color="white" />
+                        <meshStandardMaterial map={wallTex || undefined} color="white" />
                     </mesh>
                 );
             } else if (tile === 2) { // Rock
                 wallMeshes.push(
                     <mesh key={`r-${key}`} position={[x, 0.5, z]} castShadow receiveShadow>
                         <boxGeometry args={[1, 1, 1]} />
-                        <meshStandardMaterial color="white" />
+                        <meshStandardMaterial map={rockTex || undefined} color={theme.obstacle.main} />
                     </mesh>
                 );
             }
@@ -503,7 +508,11 @@ const DungeonMesh: React.FC<{ engine: GameEngine, assets: AssetLoader }> = React
             {wallMeshes}
             <mesh position={[0, -0.1, 0]} rotation={[-Math.PI/2, 0, 0]}>
                 <planeGeometry args={[30, 20]} />
-                <meshBasicMaterial color="#000" />
+                {bgTex ? (
+                    <meshBasicMaterial map={bgTex} color={theme.bg} />
+                ) : (
+                    <meshBasicMaterial color={theme.bg} />
+                )}
             </mesh>
         </group>
     );
