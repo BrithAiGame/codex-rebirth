@@ -447,8 +447,8 @@ export default function App() {
               if (isEnter) {
                    if (menuSelection === 0) resumeGame();
                    if (menuSelection === 1) setShowSettings(true);
-                   if (menuSelection === 2 && gameStats) navigator.clipboard.writeText(gameStats.seed.toString());
-                   if (menuSelection === 3) returnToMenu();
+                   if (menuSelection === 2) returnToMenu();
+                   if (menuSelection === 3 && gameStats) navigator.clipboard.writeText(gameStats.seed.toString());
               }
               if (isEsc) resumeGame();
            }
@@ -474,6 +474,7 @@ export default function App() {
   }, [status, showSettings, menuSelection, waitingForKey, selectedCharIndex, settingsSelection, settings, gameStats]);
 
   const selectedChar = CHARACTERS[selectedCharIndex];
+  const isInGame = status === GameStatus.PLAYING || status === GameStatus.PAUSED;
 
   const getBtnClass = (index: number) => `px-8 py-3 mb-2 md:mb-4 font-bold text-xl border-4 transition-all duration-75 transform text-center w-64 md:w-80 ${
       menuSelection === index 
@@ -493,24 +494,32 @@ export default function App() {
       {/* HEADER */}
       <header className="flex-none h-16 bg-neutral-900 border-b border-gray-800 flex items-center justify-between px-4 z-50 shadow-md">
          <div className="flex flex-col items-start w-1/3">
-            <div className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1 hidden md:block">{t('HEALTH')}</div>
-            <div className="flex flex-wrap max-w-[200px]">
-                {gameStats && (status === GameStatus.PLAYING || status === GameStatus.PAUSED) ? (() => {
-                    const hearts = [];
-                    const totalHearts = Math.ceil(gameStats.maxHp / 2);
-                    for(let i=0; i<totalHearts; i++) {
-                        const heartHealth = Math.max(0, Math.min(2, gameStats.hp - (i * 2)));
-                        hearts.push(<PixelHeart key={i} full={heartHealth > 0} />);
-                    }
-                    return hearts;
-                })() : <div className="text-gray-700 text-sm">--/--</div>}
-            </div>
+            {isInGame && (
+                <>
+                    <div className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1 hidden md:block">{t('HEALTH')}</div>
+                    <div className="flex flex-wrap max-w-[200px]">
+                        {gameStats ? (() => {
+                            const hearts = [];
+                            const totalHearts = Math.ceil(gameStats.maxHp / 2);
+                            for(let i=0; i<totalHearts; i++) {
+                                const heartHealth = Math.max(0, Math.min(2, gameStats.hp - (i * 2)));
+                                hearts.push(<PixelHeart key={i} full={heartHealth > 0} />);
+                            }
+                            return hearts;
+                        })() : <div className="text-gray-700 text-sm">--/--</div>}
+                    </div>
+                </>
+            )}
          </div>
          <div className="flex flex-col items-center w-1/3">
-            <div className="flex items-baseline gap-2">
-                <span className="text-amber-500 font-black text-2xl md:text-3xl tracking-tighter">{t('FLOOR')} {gameStats?.floor || 1}</span>
-            </div>
-            <div className="text-gray-400 font-bold text-sm md:text-base tracking-widest">{gameStats?.score || 0}</div>
+            {isInGame && (
+                <>
+                    <div className="flex items-baseline gap-2">
+                        <span className="text-amber-500 font-black text-2xl md:text-3xl tracking-tighter">{t('FLOOR')} {gameStats?.floor || 1}</span>
+                    </div>
+                    <div className="text-gray-400 font-bold text-sm md:text-base tracking-widest">{gameStats?.score || 0}</div>
+                </>
+            )}
          </div>
          <div className="flex items-center justify-end w-1/3 gap-2">
              <div onClick={toggleMobilePause} className="md:hidden p-2 bg-gray-800 rounded border border-gray-700 active:bg-gray-700">
@@ -523,7 +532,7 @@ export default function App() {
       <div className="flex-1 flex overflow-hidden">
           <main className="flex-1 flex flex-col relative bg-[#0a0a0a]">
               <div ref={containerRef} className="flex-1 flex items-center justify-center p-2 relative w-full h-full">
-                  {stats && (status === GameStatus.PLAYING || status === GameStatus.PAUSED) && (
+                  {stats && isInGame && (
                       <div className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 z-40 flex flex-col gap-2">
                           <AttributePill icon="🔫" value={`${fireRate}`} title="Fire Rate" />
                           <AttributePill icon="🎯" value={`${range}`} title="Range" />
@@ -600,8 +609,13 @@ export default function App() {
                                 <div className="flex flex-col items-center">
                                     <button className={getBtnClass(0)} onClick={resumeGame} onMouseEnter={() => setMenuSelection(0)}>{t('RESUME')}</button>
                                     <button className={getBtnClass(1)} onClick={() => setShowSettings(true)} onMouseEnter={() => setMenuSelection(1)}>{t('SETTINGS')}</button>
-                                    <button className={getBtnClass(2)} onClick={() => gameStats && navigator.clipboard.writeText(gameStats.seed.toString())} onMouseEnter={() => setMenuSelection(2)}>{t('COPY_SEED')}</button>
-                                    <button className={getBtnClass(3)} onClick={returnToMenu} onMouseEnter={() => setMenuSelection(3)}>{t('RETURN_TO_MENU')}</button>
+                                    <button className={getBtnClass(2)} onClick={returnToMenu} onMouseEnter={() => setMenuSelection(2)}>{t('RETURN_TO_MENU')}</button>
+                                    <button className={getBtnClass(3)} onClick={() => gameStats && navigator.clipboard.writeText(gameStats.seed.toString())} onMouseEnter={() => setMenuSelection(3)}>
+                                        <span className="flex items-center justify-between w-full text-sm md:text-base">
+                                            <span className="mr-3">SEED: {gameStats?.seed ?? '--'}</span>
+                                            <span className="px-2 py-1 border border-gray-500 text-[10px] uppercase tracking-widest">Copy</span>
+                                        </span>
+                                    </button>
                                 </div>
                             </div>
                         )}
@@ -732,6 +746,7 @@ export default function App() {
           </main>
 
           {/* DESKTOP SIDEBAR */}
+          {isInGame && (
           <aside className="hidden md:flex flex-col w-72 bg-[#080808] border-l border-gray-800 z-40">
                <div className="p-4 border-b border-gray-800 bg-black/40 h-72 flex flex-col items-center justify-center">
                    <div className="text-gray-600 text-xs font-bold uppercase mb-2 w-full text-center tracking-widest">{t('MAP')}</div>
@@ -777,9 +792,11 @@ export default function App() {
                    </div>
                </div>
           </aside>
+          )}
       </div>
 
       {/* MOBILE INFO */}
+      {isInGame && (
       <div className="md:hidden flex h-24 bg-neutral-900 border-t border-gray-800 flex-none overflow-hidden">
           <div className="w-24 h-full border-r border-gray-800 p-2 flex items-center justify-center bg-black/20">
                {settings.showMinimap && gameStats && gameStats.dungeon && (
@@ -811,6 +828,7 @@ export default function App() {
                }) : <span className="text-gray-700 text-sm italic pl-2">No Items</span>}
           </div>
       </div>
+      )}
 
       {/* FOOTER */}
       {settings.enableJoysticks && (
