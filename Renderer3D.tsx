@@ -118,6 +118,8 @@ const to3D = (val: number, max: number) => {
     return (val / TILE_SIZE) - (max / TILE_SIZE / 2);
 };
 
+const MAX_PROJECTILE_INSTANCES = 1500;
+
 // --- VOXEL ENGINE ---
 
 interface VoxelMeshProps {
@@ -444,6 +446,66 @@ const EntityGroup: React.FC<{ entity: Entity, engine: GameEngine }> = React.memo
     );
 });
 
+const ProjectileField: React.FC<{ engine: GameEngine }> = React.memo(({ engine }) => {
+    const friendlyRef = useRef<THREE.InstancedMesh>(null);
+    const enemyRef = useRef<THREE.InstancedMesh>(null);
+    const dummy = useMemo(() => new THREE.Object3D(), []);
+    const geometry = useMemo(() => new THREE.SphereGeometry(0.5, 6, 6), []);
+    const friendlyMat = useMemo(() => new THREE.MeshBasicMaterial({ color: CONSTANTS.COLORS.PROJECTILE_FRIENDLY, toneMapped: false }), []);
+    const enemyMat = useMemo(() => new THREE.MeshBasicMaterial({ color: CONSTANTS.COLORS.PROJECTILE_ENEMY, toneMapped: false }), []);
+
+    useFrame(() => {
+        let friendlyCount = 0;
+        let enemyCount = 0;
+        const entities = engine.entities as Entity[];
+
+        for (let i = 0; i < entities.length; i++) {
+            const ent = entities[i];
+            if (ent.type !== EntityType.PROJECTILE) continue;
+            const p = ent as ProjectileEntity;
+            const width = p.w / TILE_SIZE;
+            const cx = p.x + p.w / 2;
+            const cy = p.y + p.h / 2;
+            const x = to3D(cx, CONSTANTS.CANVAS_WIDTH);
+            const z = to3D(cy, CONSTANTS.CANVAS_HEIGHT);
+            let y = width / 2;
+            if (p.visualZ) y += p.visualZ / TILE_SIZE;
+
+            dummy.position.set(x, y, z);
+            dummy.scale.set(width, width, width);
+            dummy.updateMatrix();
+
+            if (p.ownerId === 'player') {
+                if (friendlyCount < MAX_PROJECTILE_INSTANCES && friendlyRef.current) {
+                    friendlyRef.current.setMatrixAt(friendlyCount, dummy.matrix);
+                    friendlyCount++;
+                }
+            } else {
+                if (enemyCount < MAX_PROJECTILE_INSTANCES && enemyRef.current) {
+                    enemyRef.current.setMatrixAt(enemyCount, dummy.matrix);
+                    enemyCount++;
+                }
+            }
+        }
+
+        if (friendlyRef.current) {
+            friendlyRef.current.count = friendlyCount;
+            friendlyRef.current.instanceMatrix.needsUpdate = true;
+        }
+        if (enemyRef.current) {
+            enemyRef.current.count = enemyCount;
+            enemyRef.current.instanceMatrix.needsUpdate = true;
+        }
+    });
+
+    return (
+        <group>
+            <instancedMesh ref={friendlyRef} args={[geometry, friendlyMat, MAX_PROJECTILE_INSTANCES]} />
+            <instancedMesh ref={enemyRef} args={[geometry, enemyMat, MAX_PROJECTILE_INSTANCES]} />
+        </group>
+    );
+});
+
 // The Static Environment
 const DungeonMesh: React.FC<{ engine: GameEngine, assets: AssetLoader }> = React.memo(({ engine, assets }) => {
     const room = engine.currentRoom;
@@ -594,9 +656,10 @@ export const GameScene: React.FC<RendererProps> = ({ engine }) => {
                 <DungeonMesh engine={engine} assets={engine.assets} />
             </group>
 
+            <ProjectileField engine={engine} />
             <EntityGroup key={engine.player.id} entity={engine.player} engine={engine} />
             
-            {engine.entities.map(ent => (
+            {engine.entities.filter(ent => ent.type !== EntityType.PROJECTILE).map(ent => (
                 <EntityGroup key={ent.id} entity={ent} engine={engine} />
             ))}
         </group>
