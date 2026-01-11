@@ -15,6 +15,9 @@ import { ENEMIES, BOSSES } from './config/enemies';
 import { ITEMS, DROPS } from './config/items';
 import { CHARACTERS } from './config/characters';
 
+const ENEMY_SHOOT_RATE_SCALE = 1 / 0.3;
+const scaleEnemyShootInterval = (base: number) => Math.max(1, Math.round(base * ENEMY_SHOOT_RATE_SCALE));
+
 export class GameEngine {
   // Headless: No Canvas/Context here. 
   // The React Renderer will read the state of this engine.
@@ -146,6 +149,9 @@ export class GameEngine {
     if (room.type === 'ITEM' && room.itemCollected) {
         room.cleared = true;
     }
+    if (room.type === 'CHEST' || room.type === 'DEVIL') {
+        room.cleared = true;
+    }
 
     // Carve doorways so the opening is visible; collision is controlled by doorAnim state.
     carveDoors(room.layout, room.doors);
@@ -209,6 +215,12 @@ export class GameEngine {
         if (room.type === 'ITEM') {
             this.spawnItem(cx, cy, room.seed);
         }
+        if (room.type === 'CHEST') {
+            this.spawnItem(cx, cy, room.seed);
+        }
+        if (room.type === 'DEVIL') {
+            this.spawnDevilItems(cx, cy, room.seed);
+        }
         
         // Spawn Boss (Initial Fight)
         if (room.type === 'BOSS') {
@@ -218,7 +230,7 @@ export class GameEngine {
 
     // 4. Enemy Spawning (Living things)
     // Note: Bosses spawned above are for initial fight. If returning to uncleared boss room, handle here.
-    if (!room.cleared && room.type !== 'START') {
+    if (!room.cleared && room.type !== 'START' && room.type !== 'CHEST' && room.type !== 'DEVIL') {
         // If it's a Boss room and we are revisiting (fled?), respawn Boss
         if (room.type === 'BOSS' && room.visited) {
              this.spawnBoss(cx, cy);
@@ -288,6 +300,9 @@ export class GameEngine {
 
         const hp = config.hpBase + (this.floorLevel * config.hpPerLevel);
 
+        const canShoot = config.shotSpeed > 0 || config.range > 0;
+        const fireRate = canShoot ? scaleEnemyShootInterval(config.fireRate) : config.fireRate;
+
         const enemy: EnemyEntity = {
             id: uuid(),
             type: EntityType.ENEMY,
@@ -308,7 +323,7 @@ export class GameEngine {
             stats: {
                 speed: config.speed,
                 damage: config.damage,
-                fireRate: config.fireRate,
+                fireRate,
                 shotSpeed: config.shotSpeed,
                 range: config.range
             },
@@ -392,6 +407,39 @@ export class GameEngine {
           visualZ: 10 // Floating
       };
       this.entities.push(item);
+  }
+
+  spawnDevilItems(x: number, y: number, seed?: number) {
+      const rng = seed !== undefined ? new SeededRNG(seed) : new SeededRNG(Math.random() * 100000);
+      const count = 1 + Math.floor(rng.next() * 4);
+      const spacing = 70;
+      const startX = x - ((count - 1) * spacing) / 2;
+      const choiceId = `devil_${this.floorLevel}_${Math.floor(seed || rng.next() * 100000)}`;
+      for (let i = 0; i < count; i++) {
+          this.spawnPedestal(startX + i * spacing, y);
+          const config = rng.weightedChoice(ITEMS);
+          if (!config) continue;
+          const costHearts = 1 + Math.floor(rng.next() * 3);
+          const item: ItemEntity = {
+              id: uuid(),
+              type: EntityType.ITEM,
+              x: startX + i * spacing - CONSTANTS.ITEM_SIZE/2,
+              y: y - CONSTANTS.ITEM_SIZE/2,
+              w: CONSTANTS.ITEM_SIZE,
+              h: CONSTANTS.ITEM_SIZE,
+              velocity: {x:0, y:0},
+              knockbackVelocity: { x: 0, y: 0 },
+              color: config.color,
+              markedForDeletion: false,
+              itemType: config.type,
+              name: config.nameKey,
+              description: config.descKey,
+              choiceGroupId: choiceId,
+              costHearts,
+              visualZ: 10
+          };
+          this.entities.push(item);
+      }
   }
   
   spawnPickup(x: number, y: number) {
@@ -811,11 +859,13 @@ export class GameEngine {
       const speed = e.stats.speed;
 
       if (id === 'mantis') {
-          if (e.timer % 80 === 0) {
+          const cycle = scaleEnemyShootInterval(80);
+          const fireTick = scaleEnemyShootInterval(10);
+          if (e.timer % cycle === 0) {
               e.aiState = 'ATTACK';
               e.velocity = { x: toPlayer.x * speed * 3, y: toPlayer.y * speed * 3 };
           }
-          if (e.timer % 80 === 10) {
+          if (e.timer % cycle === fireTick) {
               this.fireSpreadShots(e, toPlayer, 3, 0.3);
               e.aiState = 'IDLE';
           }
@@ -853,7 +903,7 @@ export class GameEngine {
           if (e.timer % e.stats.fireRate === 0) {
               this.fireSpreadShots(e, toPlayer, 2, 0.45);
           }
-          if (e.timer % 200 === 0 && distToPlayer < 120) {
+          if (e.timer % scaleEnemyShootInterval(200) === 0 && distToPlayer < 120) {
               this.fireRadialShots(e, 6, 0);
           }
           return true;
@@ -870,7 +920,7 @@ export class GameEngine {
           if (e.timer % e.stats.fireRate === 0) {
               this.spawnProjectile(e, toPlayer);
           }
-          if (e.timer % 180 === 0) {
+          if (e.timer % scaleEnemyShootInterval(180) === 0) {
               this.fireRadialShots(e, 6, e.orbitAngle);
           }
           return true;
@@ -894,11 +944,13 @@ export class GameEngine {
       }
 
       if (id === 'burrower') {
-          if (e.timer % 90 === 0) {
+          const cycle = scaleEnemyShootInterval(90);
+          const fireTick = scaleEnemyShootInterval(30);
+          if (e.timer % cycle === 0) {
               e.aiState = 'ATTACK';
               e.velocity = { x: toPlayer.x * speed * 4, y: toPlayer.y * speed * 4 };
           }
-          if (e.timer % 90 === 30) {
+          if (e.timer % cycle === fireTick) {
               this.fireRadialShots(e, 6, Math.PI / 6);
               e.aiState = 'IDLE';
           }
@@ -910,7 +962,7 @@ export class GameEngine {
           if (e.timer % e.stats.fireRate === 0) {
               this.fireRadialShots(e, 8, Math.PI / 8);
           }
-          if (e.timer % 240 === 0) {
+          if (e.timer % scaleEnemyShootInterval(240) === 0) {
               this.fireRadialShots(e, 12, 0);
           }
           return true;
@@ -934,7 +986,7 @@ export class GameEngine {
           if (e.timer % e.stats.fireRate === 0) {
               this.fireSpreadShots(e, toPlayer, 5, 0.22);
           }
-          if (e.timer % 240 === 0) {
+          if (e.timer % scaleEnemyShootInterval(240) === 0) {
               this.fireRadialShots(e, 6, Math.PI / 6);
           }
           return true;
@@ -955,11 +1007,13 @@ export class GameEngine {
       }
 
       if (id === 'stalker') {
-          if (e.timer % 90 === 0) {
+          const cycle = scaleEnemyShootInterval(90);
+          const fireTick = scaleEnemyShootInterval(15);
+          if (e.timer % cycle === 0) {
               e.aiState = 'ATTACK';
               e.velocity = { x: toPlayer.x * speed * 2.5, y: toPlayer.y * speed * 2.5 };
           }
-          if (e.timer % 90 === 15) {
+          if (e.timer % cycle === fireTick) {
               this.fireSpreadShots(e, toPlayer, 3, 0.35);
               e.aiState = 'IDLE';
           }
@@ -967,11 +1021,13 @@ export class GameEngine {
       }
 
       if (id === 'toad') {
-          if (e.timer % 120 === 0) {
+          const cycle = scaleEnemyShootInterval(120);
+          const fireTick = scaleEnemyShootInterval(20);
+          if (e.timer % cycle === 0) {
               e.aiState = 'ATTACK';
               e.velocity = { x: toPlayer.x * speed * 3, y: toPlayer.y * speed * 3 };
           }
-          if (e.timer % 120 === 20) {
+          if (e.timer % cycle === fireTick) {
               this.fireRadialShots(e, 6, Math.PI / 6);
               e.aiState = 'IDLE';
           }
@@ -979,11 +1035,13 @@ export class GameEngine {
       }
 
       if (id === 'mimic') {
-          if (e.timer % 140 === 0) {
+          const cycle = scaleEnemyShootInterval(140);
+          const fireTick = scaleEnemyShootInterval(10);
+          if (e.timer % cycle === 0) {
               e.aiState = 'ATTACK';
               e.velocity = { x: toPlayer.x * speed * 3.2, y: toPlayer.y * speed * 3.2 };
           }
-          if (e.timer % 140 === 10) {
+          if (e.timer % cycle === fireTick) {
               this.fireSpreadShots(e, toPlayer, 4, 0.25);
               e.aiState = 'IDLE';
           }
@@ -991,11 +1049,13 @@ export class GameEngine {
       }
 
       if (id === 'charger') {
-          if (e.timer % 70 === 0) {
+          const cycle = scaleEnemyShootInterval(70);
+          const fireTick = scaleEnemyShootInterval(12);
+          if (e.timer % cycle === 0) {
               e.aiState = 'ATTACK';
               e.velocity = { x: toPlayer.x * speed * 4, y: toPlayer.y * speed * 4 };
           }
-          if (e.timer % 70 === 12) {
+          if (e.timer % cycle === fireTick) {
               this.fireRadialShots(e, 4, Math.PI / 4);
               e.aiState = 'IDLE';
           }
@@ -1031,7 +1091,7 @@ export class GameEngine {
           } else {
               e.velocity = { x: 0, y: 0 };
           }
-          if (e.timer % 200 === 0) {
+          if (e.timer % scaleEnemyShootInterval(200) === 0) {
               this.fireRadialShots(e, 8, 0);
           }
           return true;
@@ -1042,7 +1102,7 @@ export class GameEngine {
           if (e.timer % e.stats.fireRate === 0) {
               this.fireRadialShots(e, 4, 0);
           }
-          if (e.timer % 240 === 0) {
+          if (e.timer % scaleEnemyShootInterval(240) === 0) {
               this.fireRadialShots(e, 6, Math.PI / 6);
           }
           return true;
@@ -1294,6 +1354,11 @@ export class GameEngine {
           this.player.inventory.push(item.itemType);
           this.notification = item.name;
           this.notificationTimer = 120;
+      }
+
+      if (item.costHearts && item.costHearts > 0) {
+          this.player.stats.maxHp = Math.max(1, this.player.stats.maxHp - item.costHearts);
+          this.player.stats.hp = Math.min(this.player.stats.hp, this.player.stats.maxHp);
       }
 
       // Apply Stats

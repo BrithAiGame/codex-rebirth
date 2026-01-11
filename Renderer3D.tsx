@@ -434,6 +434,34 @@ const EntityGroup: React.FC<{ entity: Entity, engine: GameEngine }> = React.memo
     const isFlash = (entity.flashTimer && entity.flashTimer > 0) || 
                     (entity.type === EntityType.PLAYER && (entity as PlayerEntity).invincibleTimer > 0 && Math.floor((entity as PlayerEntity).invincibleTimer / 4) % 2 === 0);
 
+    if (entity.type === EntityType.ITEM) {
+        const item = entity as ItemEntity;
+        const cost = item.costHearts || 0;
+        const heartCount = Math.max(0, Math.min(cost, 4));
+        const heartSpacing = 0.12;
+        const startX = -((heartCount - 1) * heartSpacing) / 2;
+        return (
+            <group ref={groupRef}>
+                <VoxelMesh 
+                    spriteMatrix={spriteMatrix} 
+                    colors={palette} 
+                    scaleFactor={width} 
+                    flash={!!isFlash} 
+                />
+                {heartCount > 0 && (
+                    <group position={[0, -0.25, 0]}>
+                        {Array.from({ length: heartCount }).map((_, i) => (
+                            <mesh key={`heart-${entity.id}-${i}`} position={[startX + i * heartSpacing, 0, 0]}>
+                                <boxGeometry args={[0.08, 0.08, 0.04]} />
+                                <meshStandardMaterial color="#ef4444" emissive="#7f1d1d" emissiveIntensity={0.4} />
+                            </mesh>
+                        ))}
+                    </group>
+                )}
+            </group>
+        );
+    }
+
     return (
         <group ref={groupRef}>
             <VoxelMesh 
@@ -568,7 +596,8 @@ const DungeonMesh: React.FC<{ engine: GameEngine, assets: AssetLoader }> = React
         const openShift = (doorWidth / 2) + (panelWidth / 2) - 0.05;
         const closedShift = panelWidth / 2;
         const panelShift = closedShift + (openShift - closedShift) * doorOpenT;
-        const indicatorColor = doorOpenT > 0.95 ? '#22c55e' : '#ef4444';
+        const isOpen = room.doorAnim?.state === 'open' || (!room.doorAnim && room.cleared);
+        const indicatorColor = isOpen ? '#22c55e' : '#ef4444';
 
         return (
             <group key={`door-${key}`} position={[x, 0.5, z]} rotation={[0, rotY, 0]}>

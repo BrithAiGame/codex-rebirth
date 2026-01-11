@@ -170,6 +170,22 @@ export const generateDungeon = (floorLevel: number, seed: number, targetRoomCoun
     itemRoom.type = 'ITEM';
   }
 
+  // Chest Room (Guaranteed)
+  const chestCandidates = createdRooms.filter(r => r.type === 'NORMAL');
+  if (chestCandidates.length > 0) {
+    const chestRoom = chestCandidates[Math.floor(rng.next() * chestCandidates.length)];
+    chestRoom.type = 'CHEST';
+  }
+
+  // Devil Room (33% chance)
+  if (rng.next() < 0.33) {
+    const devilCandidates = createdRooms.filter(r => r.type === 'NORMAL');
+    if (devilCandidates.length > 0) {
+      const devilRoom = devilCandidates[Math.floor(rng.next() * devilCandidates.length)];
+      devilRoom.type = 'DEVIL';
+    }
+  }
+
   // Use a Set of valid room coordinates to strictly determine neighbors
   const validRoomCoords = new Set(createdRooms.map(r => `${r.x},${r.y}`));
 
@@ -200,7 +216,7 @@ export const generateDungeon = (floorLevel: number, seed: number, targetRoomCoun
       y: cr.y,
       type: cr.type,
       doors,
-      cleared: cr.type === 'START', // Start is safe
+      cleared: cr.type === 'START' || cr.type === 'CHEST' || cr.type === 'DEVIL', // Safe rooms
       itemCollected: false,
       layout,
       visited: false,

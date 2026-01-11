@@ -850,7 +850,7 @@ export default function App() {
                                 <div className="relative" style={{ width: w*cellSize, height: h*cellSize }}>
                                     {gameStats.dungeon.map((r, i) => (
                                         <div key={i} 
-                                            className={`absolute border border-black/20 rounded-sm ${r.x === gameStats.currentRoomPos.x && r.y === gameStats.currentRoomPos.y ? 'bg-white z-10 shadow-[0_0_8px_rgba(255,255,255,0.8)]' : r.visited ? (r.type === 'BOSS' ? 'bg-red-900' : r.type === 'ITEM' ? 'bg-amber-600' : 'bg-gray-600') : 'bg-gray-800'}`}
+                                            className={`absolute border border-black/20 rounded-sm ${r.x === gameStats.currentRoomPos.x && r.y === gameStats.currentRoomPos.y ? 'bg-white z-10 shadow-[0_0_8px_rgba(255,255,255,0.8)]' : r.visited ? (r.type === 'BOSS' ? 'bg-red-900' : r.type === 'ITEM' ? 'bg-amber-600' : r.type === 'CHEST' ? 'bg-yellow-500' : r.type === 'DEVIL' ? 'bg-rose-700' : 'bg-gray-600') : 'bg-gray-800'}`}
                                             style={{ left: (r.x - minX)*cellSize, top: (r.y - minY)*cellSize, width: cellSize, height: cellSize }} 
                                         />
                                     ))}

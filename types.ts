@@ -161,12 +161,13 @@ export interface ItemEntity extends Entity {
   name: string; // Now stores Translation Key
   description: string; // Now stores Translation Key
   choiceGroupId?: string; // If set, picking this item removes others with same ID
+  costHearts?: number;
 }
 
 export interface Room {
   x: number; // Grid X
   y: number; // Grid Y
-  type: 'START' | 'NORMAL' | 'ITEM' | 'BOSS';
+  type: 'START' | 'NORMAL' | 'ITEM' | 'BOSS' | 'CHEST' | 'DEVIL';
   doors: { [key in Direction]?: boolean };
   cleared: boolean;
   itemCollected?: boolean; // New flag for persistence
