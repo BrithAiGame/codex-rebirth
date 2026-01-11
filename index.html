@@ -1,0 +1,50 @@
+
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <meta name="theme-color" content="#000000" />
+    <title>胎渊 (BIRTH)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      @font-face {
+        font-family: 'GameFontEn';
+        src: url('/fonts/en.ttf') format('truetype');
+      }
+      @font-face {
+        font-family: 'GameFontZh';
+        src: url('/fonts/zh.ttf') format('truetype');
+      }
+
+      body {
+        background-color: #111;
+        overflow: hidden;
+        user-select: none;
+        touch-action: none; /* Crucial for virtual joysticks to prevent scrolling */
+        font-family: 'GameFontEn', 'GameFontZh', monospace;
+      }
+      canvas {
+        image-rendering: pixelated; /* Crucial for pixel art style */
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "three": "https://esm.sh/three@^0.182.0",
+    "@react-three/fiber": "https://esm.sh/@react-three/fiber@^9.5.0",
+    "@react-three/drei": "https://esm.sh/@react-three/drei@^10.7.7"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
