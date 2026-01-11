@@ -37,6 +37,13 @@ const StatBar: React.FC<{ label: string, value: number, max: number, color: stri
     </div>
 );
 
+const AttributePill: React.FC<{ icon: string; value: string; title: string; className?: string }> = ({ icon, value, title, className }) => (
+    <div className={`flex items-center gap-1 px-2 py-1 rounded border border-gray-700 bg-black/40 text-xs md:text-sm font-bold text-gray-200 ${className || ''}`} title={title} aria-label={title}>
+        <span aria-hidden="true">{icon}</span>
+        <span>{value}</span>
+    </div>
+);
+
 // Icons
 const PauseIcon = () => (
     <svg viewBox="0 0 24 24" className="w-8 h-8 fill-current text-white">
@@ -474,6 +481,12 @@ export default function App() {
         : 'bg-black/60 text-gray-400 border-gray-700 hover:border-gray-500'
   }`;
 
+  const stats = gameStats?.stats;
+  const fireRate = stats ? Math.max(0.1, Math.round((60 / stats.fireRate) * 10) / 10) : null;
+  const range = stats ? Math.round(stats.range) : null;
+  const speed = stats ? Math.round(stats.speed * 10) / 10 : null;
+  const knockback = stats ? Math.round(stats.knockback * 10) / 10 : null;
+
   return (
     <div className="flex flex-col h-screen w-screen bg-[#050505] text-white select-none overflow-hidden" style={{ fontFamily: "'GameFontEn', 'GameFontZh', monospace" }}>
       
@@ -499,7 +512,7 @@ export default function App() {
             </div>
             <div className="text-gray-400 font-bold text-sm md:text-base tracking-widest">{gameStats?.score || 0}</div>
          </div>
-         <div className="flex items-center justify-end w-1/3 gap-4">
+         <div className="flex items-center justify-end w-1/3 gap-2">
              <div onClick={toggleMobilePause} className="md:hidden p-2 bg-gray-800 rounded border border-gray-700 active:bg-gray-700">
                  {status === GameStatus.PAUSED ? <PlayIcon /> : <PauseIcon />}
              </div>
@@ -510,6 +523,14 @@ export default function App() {
       <div className="flex-1 flex overflow-hidden">
           <main className="flex-1 flex flex-col relative bg-[#0a0a0a]">
               <div ref={containerRef} className="flex-1 flex items-center justify-center p-2 relative w-full h-full">
+                  {stats && (status === GameStatus.PLAYING || status === GameStatus.PAUSED) && (
+                      <div className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 z-40 flex flex-col gap-2">
+                          <AttributePill icon="🔫" value={`${fireRate}`} title="Fire Rate" />
+                          <AttributePill icon="🎯" value={`${range}`} title="Range" />
+                          <AttributePill icon="🏃" value={`${speed}`} title="Speed" />
+                          <AttributePill icon="💥" value={`${knockback}`} title="Knockback" />
+                      </div>
+                  )}
                   <div 
                     className="relative shadow-2xl overflow-hidden bg-black border-4 border-neutral-800" 
                     style={{ width: displayDims.width, height: displayDims.height }}
