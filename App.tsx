@@ -614,10 +614,10 @@ export default function App() {
               <div ref={containerRef} className="flex-1 flex items-center justify-center p-2 relative w-full h-full">
                   {stats && isInGame && (
                       <div className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 z-40 flex flex-col gap-2">
-                          <AttributePill icon="馃敨" value={`${fireRate}`} title="Fire Rate" />
-                          <AttributePill icon="馃幆" value={`${range}`} title="Range" />
-                          <AttributePill icon="馃弮" value={`${speed}`} title="Speed" />
-                          <AttributePill icon="馃挜" value={`${knockback}`} title="Knockback" />
+                          <AttributePill icon="🔫" value={`${fireRate}`} title="Fire Rate" />
+                          <AttributePill icon="🎯" value={`${range}`} title="Range" />
+                          <AttributePill icon="🏃" value={`${speed}`} title="Speed" />
+                          <AttributePill icon="💥" value={`${knockback}`} title="Knockback" />
                       </div>
                   )}
                   <div 
