@@ -271,6 +271,12 @@ export default function App() {
   const [difficultyIndex, setDifficultyIndex] = useState(0);
   const [floorTransition, setFloorTransition] = useState<{ phase: 'in' | 'out'; key: number } | null>(null);
   const floorRef = useRef<number | null>(null);
+  const [onlineView, setOnlineView] = useState<'menu' | 'create' | 'join' | 'lobby'>('menu');
+  const [roomId, setRoomId] = useState<string>('');
+  const [joinRoomId, setJoinRoomId] = useState('');
+  const [joinStatus, setJoinStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [lobbySlots, setLobbySlots] = useState<(number | null)[]>([0, null, null, null]);
+  const [localSlot, setLocalSlot] = useState(0);
 
   const [settings, setSettings] = useState<Settings>(() => {
     const isMobile = typeof window !== 'undefined' && (window.innerWidth <= 768 || /Mobi|Android/i.test(navigator.userAgent));
@@ -514,10 +520,11 @@ export default function App() {
 
            // --- MAIN MENU NAV ---
            if (status === GameStatus.MENU) {
-              if (e.code === 'ArrowUp') setMenuSelection(prev => (prev - 1 + 2) % 2);
-              if (e.code === 'ArrowDown') setMenuSelection(prev => (prev + 1) % 2);
+              if (e.code === 'ArrowUp') setMenuSelection(prev => (prev - 1 + 3) % 3);
+              if (e.code === 'ArrowDown') setMenuSelection(prev => (prev + 1) % 3);
               if (isEnter) { 
                   if (menuSelection === 0) setStatus(GameStatus.CHARACTER_SELECT); 
+                  else if (menuSelection === 1) setStatus(GameStatus.ONLINE);
                   else setShowSettings(true); 
               }
            }
@@ -551,10 +558,58 @@ export default function App() {
                if (isEnter) startGame();
                if (isEsc) setStatus(GameStatus.MENU);
            }
+           // --- ONLINE MENU NAV ---
+           else if (status === GameStatus.ONLINE) {
+               if (onlineView === 'menu') {
+                   if (e.code === 'ArrowUp') setMenuSelection(prev => (prev - 1 + 3) % 3);
+                   if (e.code === 'ArrowDown') setMenuSelection(prev => (prev + 1) % 3);
+                   if (isEnter) {
+                       if (menuSelection === 0) {
+                           const newRoom = Math.floor(100000 + Math.random() * 900000).toString();
+                           setRoomId(newRoom);
+                           setLobbySlots([0, null, null, null]);
+                           setLocalSlot(0);
+                           setOnlineView('lobby');
+                       } else if (menuSelection === 1) {
+                           setOnlineView('join');
+                           setJoinStatus('idle');
+                       } else {
+                           setStatus(GameStatus.MENU);
+                       }
+                   }
+               } else if (onlineView === 'lobby') {
+                   if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
+                       setLobbySlots(prev => {
+                           const next = [...prev];
+                           const currentChar = next[localSlot] ?? 0;
+                           const dir = e.code === 'ArrowLeft' ? -1 : 1;
+                           next[localSlot] = (currentChar + dir + CHARACTERS.length) % CHARACTERS.length;
+                           return next;
+                       });
+                   }
+                   if (e.code === 'KeyE') {
+                       startGame();
+                   }
+                   if (isEsc) {
+                       setOnlineView('menu');
+                       setMenuSelection(0);
+                   }
+               } else if (onlineView === 'join') {
+                   if (isEsc) {
+                       setOnlineView('menu');
+                       setMenuSelection(0);
+                   }
+               } else if (onlineView === 'create') {
+                   if (isEsc) {
+                       setOnlineView('menu');
+                       setMenuSelection(0);
+                   }
+               }
+           }
       };
       window.addEventListener('keydown', handleMenuNav);
       return () => window.removeEventListener('keydown', handleMenuNav);
-  }, [status, showSettings, menuSelection, waitingForKey, selectedCharIndex, settingsSelection, settings, gameStats]);
+  }, [status, showSettings, menuSelection, waitingForKey, selectedCharIndex, settingsSelection, settings, gameStats, onlineView, localSlot]);
 
   const selectedChar = CHARACTERS[selectedCharIndex];
   const isInGame = status === GameStatus.PLAYING || status === GameStatus.PAUSED;
@@ -564,6 +619,28 @@ export default function App() {
         ? 'bg-white text-black border-white scale-105' 
         : 'bg-black/60 text-gray-400 border-gray-700 hover:border-gray-500'
   }`;
+
+  const onlineMenuSelection = menuSelection;
+  const onlineBtnClass = (index: number) => `px-8 py-3 mb-2 md:mb-4 font-bold text-xl border-4 transition-all duration-75 transform text-center w-64 md:w-80 ${
+      onlineMenuSelection === index 
+        ? 'bg-white text-black border-white scale-105' 
+        : 'bg-black/60 text-gray-400 border-gray-700 hover:border-gray-500'
+  }`;
+
+  const mockJoinRoom = () => {
+      setJoinStatus('loading');
+      setTimeout(() => {
+          if (joinRoomId.trim() === '123456') {
+              setRoomId(joinRoomId.trim());
+              setLobbySlots([0, 1, null, null]);
+              setLocalSlot(1);
+              setOnlineView('lobby');
+              setJoinStatus('idle');
+          } else {
+              setJoinStatus('error');
+          }
+      }, 900);
+  };
 
   const stats = gameStats?.stats;
   const floorThemeLabel = gameStats?.themeName || '???';
@@ -702,7 +779,87 @@ export default function App() {
                             <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm">
                                 <h1 className="text-6xl md:text-8xl font-black text-transparent bg-clip-text bg-gradient-to-b from-cyan-400 to-blue-900 mb-8 tracking-tighter drop-shadow-2xl">{t('GAME_TITLE')}</h1>
                                 <button className={getBtnClass(0)} onClick={() => setStatus(GameStatus.CHARACTER_SELECT)} onMouseEnter={() => setMenuSelection(0)}>{t('START_RUN')}</button>
-                                <button className={getBtnClass(1)} onClick={() => setShowSettings(true)} onMouseEnter={() => setMenuSelection(1)}>{t('SETTINGS')}</button>
+                                <button className={getBtnClass(1)} onClick={() => { setStatus(GameStatus.ONLINE); setOnlineView('menu'); setMenuSelection(0); }} onMouseEnter={() => setMenuSelection(1)}>联机游戏</button>
+                                <button className={getBtnClass(2)} onClick={() => setShowSettings(true)} onMouseEnter={() => setMenuSelection(2)}>{t('SETTINGS')}</button>
+                            </div>
+                        )}
+
+                        {/* ONLINE MENU */}
+                        {status === GameStatus.ONLINE && !showSettings && (
+                            <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/85 backdrop-blur-sm">
+                                <h2 className="text-5xl md:text-6xl font-black text-white mb-8 tracking-[0.2em] border-b-4 border-white pb-4">联机游戏</h2>
+
+                                {onlineView === 'menu' && (
+                                    <div className="flex flex-col items-center">
+                                        <button className={onlineBtnClass(0)} onClick={() => {
+                                            const newRoom = Math.floor(100000 + Math.random() * 900000).toString();
+                                            setRoomId(newRoom);
+                                            setLobbySlots([0, null, null, null]);
+                                            setLocalSlot(0);
+                                            setOnlineView('lobby');
+                                        }} onMouseEnter={() => setMenuSelection(0)}>新建房间</button>
+                                        <button className={onlineBtnClass(1)} onClick={() => { setOnlineView('join'); setJoinStatus('idle'); }} onMouseEnter={() => setMenuSelection(1)}>加入房间</button>
+                                        <button className={onlineBtnClass(2)} onClick={() => setStatus(GameStatus.MENU)} onMouseEnter={() => setMenuSelection(2)}>返回</button>
+                                    </div>
+                                )}
+
+                                {onlineView === 'join' && (
+                                    <div className="bg-neutral-900 border-2 border-gray-700 p-6 w-full max-w-md shadow-2xl">
+                                        <div className="text-gray-400 text-sm font-bold mb-2">输入房间号</div>
+                                        <input
+                                            className="w-full px-3 py-2 bg-black border border-gray-600 text-white font-bold tracking-widest"
+                                            value={joinRoomId}
+                                            onChange={(e) => { setJoinRoomId(e.target.value); setJoinStatus('idle'); }}
+                                            placeholder="房间号"
+                                        />
+                                        <div className="mt-4 flex gap-2">
+                                            <button className="flex-1 px-4 py-2 bg-white text-black font-bold border-2 border-white" onClick={mockJoinRoom} disabled={joinStatus === 'loading'}>
+                                                {joinStatus === 'loading' ? '连接中...' : '加入'}
+                                            </button>
+                                            <button className="flex-1 px-4 py-2 bg-black text-gray-300 font-bold border-2 border-gray-600" onClick={() => setOnlineView('menu')}>返回</button>
+                                        </div>
+                                        {joinStatus === 'error' && (
+                                            <div className="mt-3 text-red-400 text-sm font-bold">房间不存在</div>
+                                        )}
+                                        <div className="mt-3 text-gray-600 text-xs">Mock: 输入 123456 可加入</div>
+                                    </div>
+                                )}
+
+                                {onlineView === 'lobby' && (
+                                    <div className="relative w-full max-w-4xl bg-neutral-900 border-2 border-gray-700 p-6 shadow-2xl">
+                                        <div className="absolute top-4 right-4 flex items-center gap-2 text-gray-300 text-sm font-bold">
+                                            <span>房间号: {roomId}</span>
+                                            <button className="px-2 py-1 border border-gray-500 text-[10px] uppercase tracking-widest" onClick={() => navigator.clipboard.writeText(roomId)}>Copy</button>
+                                        </div>
+                                        <div className="text-xl font-black text-white mb-4 tracking-widest">房间</div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            {lobbySlots.map((slot, idx) => {
+                                                const isLocal = idx === localSlot;
+                                                const char = slot !== null ? CHARACTERS[slot] : null;
+                                                return (
+                                                    <div key={idx} className={`border-2 ${isLocal ? 'border-cyan-400' : 'border-gray-700'} bg-black/40 p-4 h-40 flex flex-col items-center justify-center`}>
+                                                        <div className="text-gray-500 text-xs font-bold uppercase mb-2">SLOT {idx + 1}</div>
+                                                        {char ? (
+                                                            <>
+                                                                <SpritePreview spriteName={char.sprite as any} assetLoader={uiAssetLoader} size={72} />
+                                                                <div className="mt-2 text-white font-bold">{t(char.nameKey)}</div>
+                                                            </>
+                                                        ) : (
+                                                            <div className="text-gray-700 text-sm">空位</div>
+                                                        )}
+                                                        {isLocal && (
+                                                            <div className="mt-2 text-cyan-400 text-xs font-bold">← / → 选择角色</div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                        <div className="mt-6 flex items-center justify-between">
+                                            <div className="text-gray-400 text-sm">房主按下 <span className="text-white font-bold">E</span> 开始游戏</div>
+                                            <button className="px-6 py-2 bg-white text-black font-bold border-2 border-white" onClick={startGame}>开始游戏</button>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
 
@@ -1051,6 +1208,3 @@ export default function App() {
     </div>
   );
 }
-
-
-

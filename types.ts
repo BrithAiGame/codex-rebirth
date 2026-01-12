@@ -37,6 +37,7 @@ export enum Direction {
 export enum GameStatus {
   MENU = 'MENU',
   CHARACTER_SELECT = 'CHARACTER_SELECT', // New State
+  ONLINE = 'ONLINE',
   PLAYING = 'PLAYING',
   PAUSED = 'PAUSED',
   GAME_OVER = 'GAME_OVER',
