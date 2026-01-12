@@ -125,4 +125,8 @@ export class InputManager {
   isPausePressed(): boolean {
       return !!this.keys[this.keyMap.pause];
   }
+
+  isBombPressed(): boolean {
+      return !!this.keys[this.keyMap.bomb];
+  }
 }

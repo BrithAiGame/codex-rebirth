@@ -1,7 +1,7 @@
 
 import { CONSTANTS } from './constants';
 import { 
-  Entity, PlayerEntity, EnemyEntity, ProjectileEntity, ItemEntity, 
+  Entity, PlayerEntity, EnemyEntity, ProjectileEntity, ItemEntity, BombEntity,
   EntityType, EnemyType, Direction, Stats, ItemType, GameStatus, Room, Rect, Vector2 
 } from './types';
 import { uuid, checkAABB, distance, normalizeVector, SeededRNG } from './utils';
@@ -43,6 +43,7 @@ export class GameEngine {
   
   // Pause Logic
   pauseLocked: boolean = false;
+  bombLocked: boolean = false;
 
   // Selected Character
   characterId: string = 'alpha';
@@ -106,7 +107,8 @@ export class GameEngine {
       cooldown: 0,
       invincibleTimer: 0,
       inventory: [],
-      keys: 0,
+      keys: 1,
+      bombs: 1,
       visualZ: 0
     };
   }
@@ -156,14 +158,16 @@ export class GameEngine {
     if (room.type === 'ITEM' && room.itemCollected) {
         room.cleared = true;
     }
-    if (room.type === 'CHEST' || room.type === 'DEVIL') {
+    if (room.type === 'CHEST' || room.type === 'DEVIL' || room.type === 'HIDDEN') {
         room.cleared = true;
     }
 
     // Carve doorways so the opening is visible; collision is controlled by doorAnim state.
     carveDoors(room.layout, room.doors);
 
-    if (room.cleared) {
+    if (room.forcedOpen) {
+        room.doorAnim = { state: 'open', t: 1 };
+    } else if (room.cleared) {
         room.doorAnim = { state: 'open', t: 1 };
     } else if (room.type === 'START') {
         room.doorAnim = { state: 'open', t: 1 };
@@ -495,6 +499,45 @@ export class GameEngine {
       this.entities.push(pickup);
   }
 
+  spawnBombPickup(x: number, y: number) {
+      const config = DROPS.find(d => d.type === ItemType.BOMB);
+      const pickup: ItemEntity = {
+          id: uuid(),
+          type: EntityType.ITEM,
+          x: x - 8,
+          y: y - 8,
+          w: 16,
+          h: 16,
+          velocity: {x:0, y:0},
+          knockbackVelocity: { x: 0, y: 0 },
+          color: config ? config.color : '#6b7280',
+          markedForDeletion: false,
+          itemType: ItemType.BOMB,
+          name: config ? config.nameKey : 'PICKUP_BOMB_NAME',
+          description: config ? config.descKey : 'PICKUP_BOMB_DESC'
+      };
+      this.entities.push(pickup);
+  }
+
+  spawnBomb(x: number, y: number) {
+      const size = 20;
+      const bomb: BombEntity = {
+          id: uuid(),
+          type: EntityType.BOMB,
+          x: x - size / 2,
+          y: y - size / 2,
+          w: size,
+          h: size,
+          velocity: {x:0, y:0},
+          knockbackVelocity: { x: 0, y: 0 },
+          color: '#111827',
+          markedForDeletion: false,
+          timer: 3,
+          ownerId: 'player'
+      };
+      this.entities.push(bomb);
+  }
+
   spawnTrapdoor(x: number, y: number) {
       const td: Entity = {
           id: uuid(),
@@ -507,6 +550,99 @@ export class GameEngine {
           markedForDeletion: false
       };
       this.entities.push(td);
+  }
+
+  explodeBomb(bomb: BombEntity) {
+      if (!this.currentRoom) return;
+      bomb.markedForDeletion = true;
+
+      const ts = CONSTANTS.TILE_SIZE;
+      const center = { x: bomb.x + bomb.w / 2, y: bomb.y + bomb.h / 2 };
+      const radius = ts * 1.6;
+
+      const playerCenter = { x: this.player.x + this.player.w / 2, y: this.player.y + this.player.h / 2 };
+      const distToPlayer = distance(center, playerCenter);
+      if (distToPlayer <= radius) {
+          const hitDir = normalizeVector({ x: playerCenter.x - center.x, y: playerCenter.y - center.y });
+          this.damagePlayer(1, 4, hitDir);
+      }
+
+      const layout = this.currentRoom.layout;
+      const startX = Math.max(0, Math.floor((center.x - radius) / ts));
+      const endX = Math.min(layout[0].length - 1, Math.floor((center.x + radius) / ts));
+      const startY = Math.max(0, Math.floor((center.y - radius) / ts));
+      const endY = Math.min(layout.length - 1, Math.floor((center.y + radius) / ts));
+
+      for (let y = startY; y <= endY; y++) {
+          for (let x = startX; x <= endX; x++) {
+              const tileCenter = { x: (x + 0.5) * ts, y: (y + 0.5) * ts };
+              if (distance(center, tileCenter) <= radius && layout[y][x] === 2) {
+                  layout[y][x] = 0;
+              }
+          }
+      }
+
+      this.entities.forEach(e => {
+          if (e.type === EntityType.OBSTACLE) {
+              const ec = { x: e.x + e.w / 2, y: e.y + e.h / 2 };
+              if (distance(center, ec) <= radius) {
+                  e.markedForDeletion = true;
+              }
+          }
+      });
+
+      carveDoors(this.currentRoom.layout, this.currentRoom.doors);
+      if (!this.currentRoom.doorAnim) {
+          this.currentRoom.doorAnim = { state: 'open', t: 1 };
+      } else {
+          this.currentRoom.doorAnim.state = 'open';
+          this.currentRoom.doorAnim.t = 1;
+      }
+      this.currentRoom.forcedOpen = true;
+
+      this.tryOpenHiddenDoor(center, radius);
+  }
+
+  tryOpenHiddenDoor(center: { x: number; y: number }, radius: number) {
+      if (!this.currentRoom) return;
+      const ts = CONSTANTS.TILE_SIZE;
+      const roomCenter = {
+          x: (CONSTANTS.CANVAS_WIDTH / 2),
+          y: (CONSTANTS.CANVAS_HEIGHT / 2)
+      };
+
+      const dirs: { dir: Direction; dx: number; dy: number }[] = [
+          { dir: Direction.UP, dx: 0, dy: -1 },
+          { dir: Direction.DOWN, dx: 0, dy: 1 },
+          { dir: Direction.LEFT, dx: -1, dy: 0 },
+          { dir: Direction.RIGHT, dx: 1, dy: 0 }
+      ];
+
+      const isNearWall = (dir: Direction) => {
+          if (dir === Direction.UP) return center.y <= radius && Math.abs(center.x - roomCenter.x) <= ts;
+          if (dir === Direction.DOWN) return center.y >= (CONSTANTS.ROOM_HEIGHT - 1) * ts - radius && Math.abs(center.x - roomCenter.x) <= ts;
+          if (dir === Direction.LEFT) return center.x <= radius && Math.abs(center.y - roomCenter.y) <= ts;
+          return center.x >= (CONSTANTS.ROOM_WIDTH - 1) * ts - radius && Math.abs(center.y - roomCenter.y) <= ts;
+      };
+
+      for (const d of dirs) {
+          const neighbor = this.dungeon.find(r => r.x === this.currentRoom!.x + d.dx && r.y === this.currentRoom!.y + d.dy);
+          if (!neighbor || neighbor.type !== 'HIDDEN') continue;
+          if (!isNearWall(d.dir)) continue;
+
+          this.currentRoom.doors[d.dir] = true;
+          const opposite = d.dir === Direction.UP ? Direction.DOWN :
+                           d.dir === Direction.DOWN ? Direction.UP :
+                           d.dir === Direction.LEFT ? Direction.RIGHT : Direction.LEFT;
+          neighbor.doors[opposite] = true;
+          neighbor.cleared = true;
+          neighbor.forcedOpen = true;
+
+          carveDoors(this.currentRoom.layout, this.currentRoom.doors);
+          carveDoors(neighbor.layout, neighbor.doors);
+          if (!neighbor.doorAnim) neighbor.doorAnim = { state: 'open', t: 1 };
+          break;
+      }
   }
 
   // Generate current state for UI (shared between Pause/Playing)
@@ -555,6 +691,7 @@ export class GameEngine {
           seed: this.baseSeed,
           items: this.player.inventory.length,
           keys: this.player.keys,
+          bombs: this.player.bombs,
           notification: this.notification,
           dungeon: this.dungeon.map(r => ({x: r.x, y: r.y, type: r.type, visited: r.visited})),
           currentRoomPos: this.currentRoom ? {x: this.currentRoom.x, y: this.currentRoom.y} : {x:0, y:0},
@@ -566,7 +703,7 @@ export class GameEngine {
       };
   }
 
-  update(input: { move: {x:number, y:number}, shoot: {x:number, y:number} | null, restart?: boolean, pause?: boolean }) {
+  update(input: { move: {x:number, y:number}, shoot: {x:number, y:number} | null, restart?: boolean, pause?: boolean, bomb?: boolean }, dt: number = 1 / 60) {
     
     // Toggle Pause Logic
     if (input.pause) {
@@ -637,6 +774,18 @@ export class GameEngine {
         this.player.cooldown = this.player.stats.fireRate;
     }
 
+    if (input.bomb) {
+        if (!this.bombLocked && this.player.bombs > 0) {
+            this.player.bombs = Math.max(0, this.player.bombs - 1);
+            const cx = this.player.x + this.player.w / 2;
+            const cy = this.player.y + this.player.h / 2;
+            this.spawnBomb(cx, cy);
+        }
+        this.bombLocked = true;
+    } else {
+        this.bombLocked = false;
+    }
+
     if (this.player.invincibleTimer > 0) this.player.invincibleTimer--;
     if (this.player.flashTimer && this.player.flashTimer > 0) this.player.flashTimer--;
 
@@ -696,6 +845,12 @@ export class GameEngine {
             this.updateProjectile(e as ProjectileEntity);
         } else if (e.type === EntityType.ENEMY) {
             this.updateEnemy(e as EnemyEntity);
+        } else if (e.type === EntityType.BOMB) {
+            const bomb = e as BombEntity;
+            bomb.timer -= dt;
+            if (bomb.timer <= 0) {
+                this.explodeBomb(bomb);
+            }
         } else if (e.type === EntityType.ITEM) {
             if (checkAABB(this.player, e)) {
                 this.collectItem(e as ItemEntity);
@@ -1394,6 +1549,13 @@ export class GameEngine {
           return;
       }
 
+      if (item.itemType === ItemType.BOMB) {
+          this.player.bombs = Math.min(99, this.player.bombs + 1);
+          this.notification = item.name;
+          this.notificationTimer = 120;
+          return;
+      }
+
       // Pickup vs Inventory
       if (!config.isPickup) {
           this.player.inventory.push(item.itemType);
@@ -1447,6 +1609,11 @@ export class GameEngine {
           const keyDropChance = enemy.enemyType === EnemyType.BOSS ? 0.2 : 0.1;
           if (Math.random() < keyDropChance) {
               this.spawnKey(enemy.x + enemy.w/2, enemy.y + enemy.h/2);
+          }
+
+          const bombDropChance = enemy.enemyType === EnemyType.BOSS ? 0.2 : 0.1;
+          if (Math.random() < bombDropChance) {
+              this.spawnBombPickup(enemy.x + enemy.w/2, enemy.y + enemy.h/2);
           }
       }
   }

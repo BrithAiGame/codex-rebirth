@@ -12,6 +12,7 @@ export enum EntityType {
   PROJECTILE = 'PROJECTILE',
   ITEM = 'ITEM',
   OBSTACLE = 'OBSTACLE',
+  BOMB = 'BOMB',
   DOOR = 'DOOR',
   TRAPDOOR = 'TRAPDOOR',
   PEDESTAL = 'PEDESTAL'
@@ -55,7 +56,8 @@ export enum ItemType {
   KNOCKBACK_UP = 'KNOCKBACK_UP',
   GLASS_CANNON = 'GLASS_CANNON', // New Item
   HEART_PICKUP = 'HEART_PICKUP',
-  KEY = 'KEY'
+  KEY = 'KEY',
+  BOMB = 'BOMB'
 }
 
 export enum Language {
@@ -78,6 +80,7 @@ export interface KeyMap {
   restart: string;
   pause: string;
   toggleFullscreen: string;
+  bomb: string;
 }
 
 export interface Settings {
@@ -127,6 +130,7 @@ export interface PlayerEntity extends Entity {
   invincibleTimer: number;
   inventory: ItemType[];
   keys: number;
+  bombs: number;
 }
 
 export interface EnemyEntity extends Entity {
@@ -166,10 +170,15 @@ export interface ItemEntity extends Entity {
   costHearts?: number;
 }
 
+export interface BombEntity extends Entity {
+  timer: number;
+  ownerId: string;
+}
+
 export interface Room {
   x: number; // Grid X
   y: number; // Grid Y
-  type: 'START' | 'NORMAL' | 'ITEM' | 'BOSS' | 'CHEST' | 'DEVIL';
+  type: 'START' | 'NORMAL' | 'ITEM' | 'BOSS' | 'CHEST' | 'DEVIL' | 'HIDDEN';
   doors: { [key in Direction]?: boolean };
   cleared: boolean;
   itemCollected?: boolean; // New flag for persistence
@@ -178,6 +187,7 @@ export interface Room {
   seed: number; // Deterministic seed for room events
   themeId?: number; // Visual theme
   doorAnim?: { state: 'closing' | 'closed' | 'opening' | 'open'; t: number };
+  forcedOpen?: boolean;
   savedEntities?: Entity[]; // Persist items, pedestals, trapdoors
 }
 

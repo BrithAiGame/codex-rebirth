@@ -2,7 +2,7 @@
 import React, { useRef, useMemo, useState, useEffect, useLayoutEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { GameEngine } from './game';
-import { Entity, EntityType, PlayerEntity, EnemyEntity, ProjectileEntity, ItemEntity, Room } from './types';
+import { Entity, EntityType, PlayerEntity, EnemyEntity, ProjectileEntity, ItemEntity, BombEntity, Room } from './types';
 import { CONSTANTS } from './constants';
 import * as THREE from 'three';
 import { AssetLoader } from './assets';
@@ -402,6 +402,16 @@ const EntityGroup: React.FC<{ entity: Entity, engine: GameEngine }> = React.memo
             } else {
                 groupRef.current.rotation.y = 0;
             }
+
+            if (entity.type === EntityType.BOMB) {
+                const bomb = entity as BombEntity;
+                const t = Math.max(0, Math.min(3, bomb.timer));
+                const pulseSpeed = 6 + (3 - t) * 4;
+                const pulse = 0.9 + Math.sin(state.clock.elapsedTime * pulseSpeed) * 0.12;
+                groupRef.current.scale.setScalar(pulse);
+            } else {
+                groupRef.current.scale.set(1, 1, 1);
+            }
         }
     });
 
@@ -434,7 +444,20 @@ const EntityGroup: React.FC<{ entity: Entity, engine: GameEngine }> = React.memo
         );
     }
 
-    // 3. Trapdoors: Flat
+    // 3. Bombs
+    if (entity.type === EntityType.BOMB) {
+        return (
+            <group ref={groupRef}>
+                <mesh castShadow>
+                    <sphereGeometry args={[width / 2, 12, 12]} />
+                    <meshStandardMaterial color="#111827" emissive="#ef4444" emissiveIntensity={0.6} />
+                </mesh>
+                <pointLight color="#f97316" intensity={1.8} distance={2.5} decay={2} />
+            </group>
+        );
+    }
+
+    // 4. Trapdoors: Flat
     if (entity.type === EntityType.TRAPDOOR) {
          return (
              <group ref={groupRef}>
@@ -454,7 +477,7 @@ const EntityGroup: React.FC<{ entity: Entity, engine: GameEngine }> = React.memo
          );
     }
 
-    // 4. Characters, Items, Enemies: VOXEL MESHES
+    // 5. Characters, Items, Enemies: VOXEL MESHES
     const isFlash = (entity.flashTimer && entity.flashTimer > 0) || 
                     (entity.type === EntityType.PLAYER && (entity as PlayerEntity).invincibleTimer > 0 && Math.floor((entity as PlayerEntity).invincibleTimer / 4) % 2 === 0);
 
@@ -704,6 +727,7 @@ const ParticleField: React.FC<{ engine: GameEngine }> = React.memo(({ engine }) 
     const particlesRef = useRef<Particle[]>([]);
     const ambientRefData = useRef<AmbientParticle[]>([]);
     const prevProjectiles = useRef<Map<string, { pos: THREE.Vector3; ownerId: string }>>(new Map());
+    const prevBombs = useRef<Map<string, THREE.Vector3>>(new Map());
     const prevFlash = useRef<Map<string, number>>(new Map());
     const roomKeyRef = useRef<string | null>(null);
     const dummy = useMemo(() => new THREE.Object3D(), []);
@@ -751,6 +775,7 @@ const ParticleField: React.FC<{ engine: GameEngine }> = React.memo(({ engine }) 
             roomKeyRef.current = roomKey;
             particlesRef.current = [];
             prevProjectiles.current = new Map();
+            prevBombs.current = new Map();
             prevFlash.current = new Map();
             resetAmbient();
         }
@@ -777,6 +802,7 @@ const ParticleField: React.FC<{ engine: GameEngine }> = React.memo(({ engine }) 
         }
 
         const currentProjectiles = new Map<string, { pos: THREE.Vector3; ownerId: string }>();
+        const currentBombs = new Map<string, THREE.Vector3>();
         const entities = engine.entities as Entity[];
 
         for (let i = 0; i < entities.length; i++) {
@@ -802,6 +828,12 @@ const ParticleField: React.FC<{ engine: GameEngine }> = React.memo(({ engine }) 
                     }
                 }
             }
+            } else if (ent.type === EntityType.BOMB) {
+                const b = ent as BombEntity;
+                const cx = b.x + b.w / 2;
+                const cy = b.y + b.h / 2;
+                const pos = new THREE.Vector3(to3D(cx, CONSTANTS.CANVAS_WIDTH), (b.w / TILE_SIZE) / 2, to3D(cy, CONSTANTS.CANVAS_HEIGHT));
+                currentBombs.set(b.id, pos);
             } else if (ent.type === EntityType.ENEMY || ent.type === EntityType.PLAYER) {
                 const last = prevFlash.current.get(ent.id) || 0;
                 const current = ent.flashTimer || 0;
@@ -826,6 +858,13 @@ const ParticleField: React.FC<{ engine: GameEngine }> = React.memo(({ engine }) 
         });
 
         prevProjectiles.current = currentProjectiles;
+
+        prevBombs.current.forEach((pos, id) => {
+            if (!currentBombs.has(id)) {
+                spawnBurst(pos, new THREE.Color('#f97316'), 28, 1.8, 0.8);
+            }
+        });
+        prevBombs.current = currentBombs;
 
         const particles = particlesRef.current;
         for (let i = particles.length - 1; i >= 0; i--) {

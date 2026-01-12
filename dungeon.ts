@@ -201,11 +201,45 @@ export const generateDungeon = (floorLevel: number, seed: number, targetRoomCoun
     }
   }
 
-  // Use a Set of valid room coordinates to strictly determine neighbors
+  // Hidden Room (L-corner placement)
+  const roomCoordSet = new Set(createdRooms.map(r => `${r.x},${r.y}`));
+  const hiddenCandidates = new Set<string>();
+
+  const addHiddenCandidate = (x: number, y: number) => {
+    const key = `${x},${y}`;
+    if (roomCoordSet.has(key)) return;
+    hiddenCandidates.add(key);
+  };
+
+  createdRooms.forEach(r => {
+    if (roomCoordSet.has(`${r.x + 1},${r.y}`) && roomCoordSet.has(`${r.x},${r.y + 1}`)) {
+      addHiddenCandidate(r.x + 1, r.y + 1);
+    }
+    if (roomCoordSet.has(`${r.x + 1},${r.y}`) && roomCoordSet.has(`${r.x},${r.y - 1}`)) {
+      addHiddenCandidate(r.x + 1, r.y - 1);
+    }
+    if (roomCoordSet.has(`${r.x - 1},${r.y}`) && roomCoordSet.has(`${r.x},${r.y + 1}`)) {
+      addHiddenCandidate(r.x - 1, r.y + 1);
+    }
+    if (roomCoordSet.has(`${r.x - 1},${r.y}`) && roomCoordSet.has(`${r.x},${r.y - 1}`)) {
+      addHiddenCandidate(r.x - 1, r.y - 1);
+    }
+  });
+
+  const hiddenRooms: {x: number, y: number, type: Room['type'], dist: number}[] = [];
+  if (hiddenCandidates.size > 0) {
+    const candidates = Array.from(hiddenCandidates);
+    const pick = candidates[Math.floor(rng.next() * candidates.length)];
+    const [hx, hy] = pick.split(',').map(Number);
+    hiddenRooms.push({ x: hx, y: hy, type: 'HIDDEN', dist: 0 });
+  }
+
+  // Use a Set of valid room coordinates to strictly determine neighbors (exclude hidden)
   const validRoomCoords = new Set(createdRooms.map(r => `${r.x},${r.y}`));
 
   // Convert to Full Room Objects with Doors
-  createdRooms.forEach(cr => {
+  const allRooms = [...createdRooms, ...hiddenRooms];
+  allRooms.forEach(cr => {
     // Check neighbors using the VALID rooms list
     const doors: Room['doors'] = {};
     const hasNeighbor = (dx: number, dy: number) => 
@@ -218,7 +252,7 @@ export const generateDungeon = (floorLevel: number, seed: number, targetRoomCoun
 
     // Generate Layout
     let layout: number[][];
-    if (cr.type === 'START' || cr.type === 'BOSS' || cr.type === 'ITEM') {
+    if (cr.type === 'START' || cr.type === 'BOSS' || cr.type === 'ITEM' || cr.type === 'HIDDEN') {
         layout = createEmptyTemplate(); // Start/Boss/Item usually clear
     } else {
         // Procedural Topology for Normal Rooms
@@ -230,8 +264,8 @@ export const generateDungeon = (floorLevel: number, seed: number, targetRoomCoun
       x: cr.x,
       y: cr.y,
       type: cr.type,
-      doors,
-      cleared: cr.type === 'START' || cr.type === 'CHEST' || cr.type === 'DEVIL', // Safe rooms
+      doors: cr.type === 'HIDDEN' ? {} : doors,
+      cleared: cr.type === 'START' || cr.type === 'CHEST' || cr.type === 'DEVIL' || cr.type === 'HIDDEN', // Safe rooms
       itemCollected: false,
       layout,
       visited: false,

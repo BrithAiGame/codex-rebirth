@@ -161,5 +161,16 @@ export const DROPS: ItemConfig[] = [
     weight: 0,
     stats: {},
     isPickup: true
+  },
+  {
+    id: 'bomb_pickup',
+    type: ItemType.BOMB,
+    nameKey: 'PICKUP_BOMB_NAME',
+    descKey: 'PICKUP_BOMB_DESC',
+    color: '#6b7280',
+    sprite: 'ITEM', // Placeholder sprite
+    weight: 0,
+    stats: {},
+    isPickup: true
   }
 ];

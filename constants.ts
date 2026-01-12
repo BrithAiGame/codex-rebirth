@@ -173,6 +173,7 @@ export const DEFAULT_KEYMAP: KeyMap = {
   shootDown: 'ArrowDown',
   shootLeft: 'ArrowLeft',
   shootRight: 'ArrowRight',
+  bomb: 'KeyE',
   restart: 'KeyR',
   pause: 'Escape',
   toggleFullscreen: 'KeyF'
@@ -226,6 +227,7 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     KEY_SHOOT_DOWN: "下射",
     KEY_SHOOT_LEFT: "左射",
     KEY_SHOOT_RIGHT: "右射",
+    KEY_BOMB: "炸弹",
     KEY_RESTART: "重开",
     KEY_PAUSE: "暂停",
     KEY_TOGGLE_FULLSCREEN: "全屏",
@@ -284,6 +286,8 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     PICKUP_HEART_DESC: "恢复 1 格生命",
     PICKUP_KEY_NAME: "钥匙",
     PICKUP_KEY_DESC: "开启宝藏房",
+    PICKUP_BOMB_NAME: "炸弹",
+    PICKUP_BOMB_DESC: "获得 1 个炸弹",
     NOTIF_RESTART: "旅程重置",
   },
   [Language.ZH_TW]: {
@@ -331,6 +335,7 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     KEY_SHOOT_DOWN: "下射",
     KEY_SHOOT_LEFT: "左射",
     KEY_SHOOT_RIGHT: "右射",
+    KEY_BOMB: "炸彈",
     KEY_RESTART: "重開",
     KEY_PAUSE: "暫停",
     KEY_TOGGLE_FULLSCREEN: "全屏",
@@ -386,6 +391,8 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     PICKUP_HEART_DESC: "恢復 1 格生命",
     PICKUP_KEY_NAME: "鑰匙",
     PICKUP_KEY_DESC: "開啟寶藏房",
+    PICKUP_BOMB_NAME: "炸彈",
+    PICKUP_BOMB_DESC: "獲得 1 個炸彈",
     NOTIF_RESTART: "旅程重置",
   },
   [Language.EN]: {
@@ -434,6 +441,7 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     KEY_SHOOT_DOWN: "Shoot Down",
     KEY_SHOOT_LEFT: "Shoot Left",
     KEY_SHOOT_RIGHT: "Shoot Right",
+    KEY_BOMB: "Bomb",
     KEY_RESTART: "Restart",
     KEY_PAUSE: "Pause",
     KEY_TOGGLE_FULLSCREEN: "Fullscreen",
@@ -489,6 +497,8 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     PICKUP_HEART_DESC: "Recover 1 HP",
     PICKUP_KEY_NAME: "Key",
     PICKUP_KEY_DESC: "Opens treasure rooms",
+    PICKUP_BOMB_NAME: "Bomb",
+    PICKUP_BOMB_DESC: "Gain 1 bomb",
     NOTIF_RESTART: "RUN RESTARTED",
   },
   [Language.RU]: {
@@ -536,6 +546,7 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     KEY_SHOOT_DOWN: "Стрелять Вниз",
     KEY_SHOOT_LEFT: "Стрелять Влево",
     KEY_SHOOT_RIGHT: "Стрелять Вправо",
+    KEY_BOMB: "Бомба",
     KEY_RESTART: "Рестарт",
     KEY_PAUSE: "Пауза",
     KEY_TOGGLE_FULLSCREEN: "Полный экран",
@@ -591,6 +602,8 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     PICKUP_HEART_DESC: "Восст. 1 ОЗ",
     PICKUP_KEY_NAME: "Ключ",
     PICKUP_KEY_DESC: "Открывает комнату сокровищ",
+    PICKUP_BOMB_NAME: "Бомба",
+    PICKUP_BOMB_DESC: "Получено 1 бомба",
     NOTIF_RESTART: "РЕСТАРТ",
   }
 };

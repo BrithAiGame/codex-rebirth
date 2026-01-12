@@ -193,7 +193,8 @@ const GameLoop: React.FC<{ engine: GameEngine, input: React.MutableRefObject<Inp
                         const shoot = (kbShoot && (Math.abs(kbShoot.x) > 0 || Math.abs(kbShoot.y) > 0)) ? kbShoot : (Math.abs(joyShoot.current.x) > 0.2 || Math.abs(joyShoot.current.y) > 0.2) ? joyShoot.current : null;
                         const restart = input.current.isRestartPressed();
                         const pause = input.current.isPausePressed();
-                        engine.update({ move, shoot, restart, pause });
+                        const bomb = input.current.isBombPressed();
+                        engine.update({ move, shoot, restart, pause, bomb }, frameInterval / 1000);
                     }
                 }
                 accumulator -= frameInterval;
@@ -223,6 +224,7 @@ const SETTING_ITEMS = [
 const ORDERED_KEYS = [
     'moveUp', 'moveDown', 'moveLeft', 'moveRight', 
     'shootUp', 'shootDown', 'shootLeft', 'shootRight', 
+    'bomb',
     'restart', 'pause', 'toggleFullscreen'
 ] as (keyof KeyMap)[];
 
@@ -254,6 +256,7 @@ export default function App() {
     restartTimer?: number;
     inventory?: ItemType[];
     keys?: number;
+    bombs?: number;
   } | null>(null);
   
   const [status, setStatus] = useState<GameStatus>(GameStatus.MENU);
@@ -620,6 +623,7 @@ export default function App() {
                           <AttributePill icon="🏃" value={`${speed}`} title="Speed" />
                           <AttributePill icon="💥" value={`${knockback}`} title="Knockback" />
                           <AttributePill icon="🔑" value={`${gameStats?.keys ?? 0}`} title="Keys" />
+                          <AttributePill icon="💣" value={`${gameStats?.bombs ?? 0}`} title="Bombs" />
                       </div>
                   )}
                   <div 
@@ -896,20 +900,27 @@ export default function App() {
                    <div className="text-gray-600 text-xs font-bold uppercase mb-2 w-full text-center tracking-widest">{t('MAP')}</div>
                    <div className="relative w-full h-full bg-[#050505] rounded border border-gray-800 flex items-center justify-center overflow-hidden">
                        {settings.showMinimap && gameStats && gameStats.dungeon ? (() => {
-                            const xs = gameStats.dungeon.map(r => r.x);
-                            const ys = gameStats.dungeon.map(r => r.y);
+                            const visibleRooms = gameStats.dungeon.filter(r => r.type !== 'HIDDEN' || r.visited);
+                            const xs = visibleRooms.map(r => r.x);
+                            const ys = visibleRooms.map(r => r.y);
                             const minX = Math.min(...xs); const maxX = Math.max(...xs);
                             const minY = Math.min(...ys); const maxY = Math.max(...ys);
                             const w = maxX - minX + 1; const h = maxY - minY + 1;
                             const cellSize = Math.min(20, 200 / Math.max(w, h));
                             return (
                                 <div className="relative" style={{ width: w*cellSize, height: h*cellSize }}>
-                                    {gameStats.dungeon.map((r, i) => (
+                                    {visibleRooms.map((r, i) => {
+                                        const isCurrent = r.x === gameStats.currentRoomPos.x && r.y === gameStats.currentRoomPos.y;
+                                        const isHidden = r.type === 'HIDDEN' && r.visited;
+                                        return (
                                         <div key={i} 
-                                            className={`absolute border border-black/20 rounded-sm ${r.x === gameStats.currentRoomPos.x && r.y === gameStats.currentRoomPos.y ? 'bg-white z-10 shadow-[0_0_8px_rgba(255,255,255,0.8)]' : r.visited ? (r.type === 'BOSS' ? 'bg-red-900' : r.type === 'ITEM' ? 'bg-amber-600' : r.type === 'CHEST' ? 'bg-yellow-500' : r.type === 'DEVIL' ? 'bg-rose-700' : 'bg-gray-600') : 'bg-gray-800'}`}
+                                            className={`absolute border border-black/20 rounded-sm flex items-center justify-center text-[10px] font-bold ${isCurrent ? 'bg-white z-10 shadow-[0_0_8px_rgba(255,255,255,0.8)] text-black' : r.visited ? (r.type === 'BOSS' ? 'bg-red-900' : r.type === 'ITEM' ? 'bg-amber-600' : r.type === 'CHEST' ? 'bg-yellow-500' : r.type === 'DEVIL' ? 'bg-rose-700' : r.type === 'HIDDEN' ? 'bg-slate-700' : 'bg-gray-600') : 'bg-gray-800'}`}
                                             style={{ left: (r.x - minX)*cellSize, top: (r.y - minY)*cellSize, width: cellSize, height: cellSize }} 
-                                        />
-                                    ))}
+                                        >
+                                            {isHidden && !isCurrent ? '?' : ''}
+                                        </div>
+                                        );
+                                    })}
                                 </div>
                             );
                        })() : <div className="text-gray-800 text-xs">OFFLINE</div>}
@@ -946,15 +957,22 @@ export default function App() {
                {settings.showMinimap && gameStats && gameStats.dungeon && (
                    <div className="relative w-full h-full flex items-center justify-center transform scale-75 origin-center">
                         {(() => {
-                            const xs = gameStats.dungeon.map(r => r.x);
-                            const ys = gameStats.dungeon.map(r => r.y);
+                            const visibleRooms = gameStats.dungeon.filter(r => r.type !== 'HIDDEN' || r.visited);
+                            const xs = visibleRooms.map(r => r.x);
+                            const ys = visibleRooms.map(r => r.y);
                             const minX = Math.min(...xs); const minY = Math.min(...ys);
                             return (
                                 <div className="relative">
-                                    {gameStats.dungeon.map((r, i) => (
-                                        <div key={i} className={`absolute w-3 h-3 rounded-sm ${r.x === gameStats.currentRoomPos.x && r.y === gameStats.currentRoomPos.y ? 'bg-white' : r.visited ? 'bg-gray-500' : 'bg-gray-800'}`}
-                                             style={{ left: (r.x - minX)*12, top: (r.y - minY)*12 }} />
-                                    ))}
+                                    {visibleRooms.map((r, i) => {
+                                        const isCurrent = r.x === gameStats.currentRoomPos.x && r.y === gameStats.currentRoomPos.y;
+                                        const isHidden = r.type === 'HIDDEN' && r.visited;
+                                        return (
+                                        <div key={i} className={`absolute w-3 h-3 rounded-sm flex items-center justify-center text-[8px] font-bold ${isCurrent ? 'bg-white text-black' : r.visited ? (r.type === 'HIDDEN' ? 'bg-slate-700 text-white' : 'bg-gray-500') : 'bg-gray-800'}`}
+                                             style={{ left: (r.x - minX)*12, top: (r.y - minY)*12 }}>
+                                            {isHidden && !isCurrent ? '?' : ''}
+                                        </div>
+                                        );
+                                    })}
                                 </div>
                             );
                         })()}
