@@ -106,6 +106,7 @@ export class GameEngine {
       cooldown: 0,
       invincibleTimer: 0,
       inventory: [],
+      keys: 0,
       visualZ: 0
     };
   }
@@ -474,6 +475,26 @@ export class GameEngine {
       this.entities.push(pickup);
   }
 
+  spawnKey(x: number, y: number) {
+      const config = DROPS.find(d => d.type === ItemType.KEY);
+      const pickup: ItemEntity = {
+          id: uuid(),
+          type: EntityType.ITEM,
+          x: x - 8,
+          y: y - 8,
+          w: 16,
+          h: 16,
+          velocity: {x:0, y:0},
+          knockbackVelocity: { x: 0, y: 0 },
+          color: config ? config.color : '#fbbf24',
+          markedForDeletion: false,
+          itemType: ItemType.KEY,
+          name: config ? config.nameKey : 'PICKUP_KEY_NAME',
+          description: config ? config.descKey : 'PICKUP_KEY_DESC'
+      };
+      this.entities.push(pickup);
+  }
+
   spawnTrapdoor(x: number, y: number) {
       const td: Entity = {
           id: uuid(),
@@ -533,6 +554,7 @@ export class GameEngine {
           score: this.score,
           seed: this.baseSeed,
           items: this.player.inventory.length,
+          keys: this.player.keys,
           notification: this.notification,
           dungeon: this.dungeon.map(r => ({x: r.x, y: r.y, type: r.type, visited: r.visited})),
           currentRoomPos: this.currentRoom ? {x: this.currentRoom.x, y: this.currentRoom.y} : {x:0, y:0},
@@ -1340,6 +1362,10 @@ export class GameEngine {
               const dy = dir === Direction.DOWN ? 1 : dir === Direction.UP ? -1 : 0;
               const nextRoom = this.dungeon.find(r => r.x === this.currentRoom!.x + dx && r.y === this.currentRoom!.y + dy);
               if (nextRoom) {
+                  if (nextRoom.type === 'CHEST' && this.floorLevel > 1) {
+                      if (this.player.keys <= 0) return;
+                      this.player.keys = Math.max(0, this.player.keys - 1);
+                  }
                   this.enterRoom(nextRoom, dir);
               }
           }
@@ -1359,6 +1385,13 @@ export class GameEngine {
                    e.markedForDeletion = true;
                }
            });
+      }
+
+      if (item.itemType === ItemType.KEY) {
+          this.player.keys = Math.min(99, this.player.keys + 1);
+          this.notification = item.name;
+          this.notificationTimer = 120;
+          return;
       }
 
       // Pickup vs Inventory
@@ -1409,6 +1442,11 @@ export class GameEngine {
           
           if (Math.random() < 0.05) {
               this.spawnPickup(enemy.x + enemy.w/2, enemy.y + enemy.h/2);
+          }
+
+          const keyDropChance = enemy.enemyType === EnemyType.BOSS ? 0.2 : 0.1;
+          if (Math.random() < keyDropChance) {
+              this.spawnKey(enemy.x + enemy.w/2, enemy.y + enemy.h/2);
           }
       }
   }

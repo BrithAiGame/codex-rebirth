@@ -627,10 +627,13 @@ const DungeonMesh: React.FC<{ engine: GameEngine, assets: AssetLoader }> = React
         const openShift = (doorWidth / 2) + (panelWidth / 2) - 0.05;
         const closedShift = panelWidth / 2;
         const panelShift = closedShift + (openShift - closedShift) * doorOpenT;
-        const isLocked = !room.cleared && room.type !== 'START' && room.type !== 'CHEST' && room.type !== 'DEVIL';
+        const requiresKey = neighborType === 'CHEST' && room.type !== 'CHEST' && engine.floorLevel > 1;
+        const hasKey = (engine.player?.keys || 0) > 0;
+        const keyLocked = requiresKey && !hasKey;
+        const isLocked = (!room.cleared && room.type !== 'START' && room.type !== 'CHEST' && room.type !== 'DEVIL') || keyLocked;
         const canPass = !isLocked;
         let indicatorColor = canPass ? '#22c55e' : '#ef4444';
-        if (canPass && neighborType === 'CHEST' && room.type !== 'CHEST') {
+        if (canPass && requiresKey) {
             indicatorColor = '#fbbf24';
         }
 
@@ -705,8 +708,8 @@ const ParticleField: React.FC<{ engine: GameEngine }> = React.memo(({ engine }) 
     const roomKeyRef = useRef<string | null>(null);
     const dummy = useMemo(() => new THREE.Object3D(), []);
     const geom = useMemo(() => new THREE.SphereGeometry(0.1, 6, 6), []);
-    const material = useMemo(() => new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.95, toneMapped: false, depthWrite: false, blending: THREE.AdditiveBlending }), []);
-    const ambientMat = useMemo(() => new THREE.MeshBasicMaterial({ color: '#374151', transparent: true, opacity: 0.45, toneMapped: false, depthWrite: false, blending: THREE.AdditiveBlending }), []);
+    const material = useMemo(() => new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.95, toneMapped: false, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending }), []);
+    const ambientMat = useMemo(() => new THREE.MeshBasicMaterial({ color: '#374151', transparent: true, opacity: 0.45, toneMapped: false, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending }), []);
 
     const resetAmbient = () => {
         ambientRefData.current = [];

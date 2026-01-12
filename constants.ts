@@ -282,6 +282,8 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     
     PICKUP_HEART_NAME: "心脏",
     PICKUP_HEART_DESC: "恢复 1 格生命",
+    PICKUP_KEY_NAME: "钥匙",
+    PICKUP_KEY_DESC: "开启宝藏房",
     NOTIF_RESTART: "旅程重置",
   },
   [Language.ZH_TW]: {
@@ -382,6 +384,8 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     
     PICKUP_HEART_NAME: "心臟",
     PICKUP_HEART_DESC: "恢復 1 格生命",
+    PICKUP_KEY_NAME: "鑰匙",
+    PICKUP_KEY_DESC: "開啟寶藏房",
     NOTIF_RESTART: "旅程重置",
   },
   [Language.EN]: {
@@ -483,6 +487,8 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     
     PICKUP_HEART_NAME: "Heart",
     PICKUP_HEART_DESC: "Recover 1 HP",
+    PICKUP_KEY_NAME: "Key",
+    PICKUP_KEY_DESC: "Opens treasure rooms",
     NOTIF_RESTART: "RUN RESTARTED",
   },
   [Language.RU]: {
@@ -583,6 +589,8 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
 
     PICKUP_HEART_NAME: "Сердце",
     PICKUP_HEART_DESC: "Восст. 1 ОЗ",
+    PICKUP_KEY_NAME: "Ключ",
+    PICKUP_KEY_DESC: "Открывает комнату сокровищ",
     NOTIF_RESTART: "РЕСТАРТ",
   }
 };

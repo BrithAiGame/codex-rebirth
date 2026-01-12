@@ -253,6 +253,7 @@ export default function App() {
     themeName?: string | null;
     restartTimer?: number;
     inventory?: ItemType[];
+    keys?: number;
   } | null>(null);
   
   const [status, setStatus] = useState<GameStatus>(GameStatus.MENU);
@@ -618,6 +619,7 @@ export default function App() {
                           <AttributePill icon="🎯" value={`${range}`} title="Range" />
                           <AttributePill icon="🏃" value={`${speed}`} title="Speed" />
                           <AttributePill icon="💥" value={`${knockback}`} title="Knockback" />
+                          <AttributePill icon="🔑" value={`${gameStats?.keys ?? 0}`} title="Keys" />
                       </div>
                   )}
                   <div 

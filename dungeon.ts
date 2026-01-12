@@ -158,10 +158,24 @@ export const generateDungeon = (floorLevel: number, seed: number, targetRoomCoun
   // Assign Special Rooms
   // Start Room
   createdRooms[0].type = 'START';
+
+  const countNeighbors = (room: {x:number, y:number}) => {
+    const dirs = [
+      {x:0, y:-1}, {x:0, y:1}, {x:-1, y:0}, {x:1, y:0}
+    ];
+    let count = 0;
+    for (const d of dirs) {
+      if (createdRooms.some(r => r.x === room.x + d.x && r.y === room.y + d.y)) count++;
+    }
+    return count;
+  };
   
-  // Boss Room (Furthest away)
-  const furthest = createdRooms.reduce((prev, curr) => curr.dist > prev.dist ? curr : prev, createdRooms[0]);
-  furthest.type = 'BOSS';
+  // Boss Room (Furthest away, not adjacent to start)
+  const bossCandidates = createdRooms.filter(r => r.type === 'NORMAL' && r.dist >= 2);
+  const bossRoom = (bossCandidates.length > 0
+    ? bossCandidates.reduce((prev, curr) => curr.dist > prev.dist ? curr : prev, bossCandidates[0])
+    : createdRooms.reduce((prev, curr) => curr.dist > prev.dist ? curr : prev, createdRooms[0]));
+  bossRoom.type = 'BOSS';
 
   // Item Room (Random non-start, non-boss)
   const candidates = createdRooms.filter(r => r.type === 'NORMAL');
@@ -170,10 +184,11 @@ export const generateDungeon = (floorLevel: number, seed: number, targetRoomCoun
     itemRoom.type = 'ITEM';
   }
 
-  // Chest Room (Guaranteed)
-  const chestCandidates = createdRooms.filter(r => r.type === 'NORMAL');
-  if (chestCandidates.length > 0) {
-    const chestRoom = chestCandidates[Math.floor(rng.next() * chestCandidates.length)];
+  // Chest Room (Guaranteed) - prefer leaf/corner
+  const leafCandidates = createdRooms.filter(r => r.type === 'NORMAL' && countNeighbors(r) === 1);
+  const chestPool = leafCandidates.length > 0 ? leafCandidates : createdRooms.filter(r => r.type === 'NORMAL');
+  if (chestPool.length > 0) {
+    const chestRoom = chestPool.reduce((prev, curr) => curr.dist > prev.dist ? curr : prev, chestPool[0]);
     chestRoom.type = 'CHEST';
   }
 

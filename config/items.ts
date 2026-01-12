@@ -150,5 +150,16 @@ export const DROPS: ItemConfig[] = [
     weight: 0, // Not used in standard item pool
     stats: { hp: 1 },
     isPickup: true
+  },
+  {
+    id: 'key_pickup',
+    type: ItemType.KEY,
+    nameKey: 'PICKUP_KEY_NAME',
+    descKey: 'PICKUP_KEY_DESC',
+    color: '#fbbf24',
+    sprite: 'ITEM', // Placeholder sprite
+    weight: 0,
+    stats: {},
+    isPickup: true
   }
 ];

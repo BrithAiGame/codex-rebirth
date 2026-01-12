@@ -54,7 +54,8 @@ export enum ItemType {
   QUAD_SHOT = 'QUAD_SHOT',
   KNOCKBACK_UP = 'KNOCKBACK_UP',
   GLASS_CANNON = 'GLASS_CANNON', // New Item
-  HEART_PICKUP = 'HEART_PICKUP'
+  HEART_PICKUP = 'HEART_PICKUP',
+  KEY = 'KEY'
 }
 
 export enum Language {
@@ -125,6 +126,7 @@ export interface PlayerEntity extends Entity {
   cooldown: number;
   invincibleTimer: number;
   inventory: ItemType[];
+  keys: number;
 }
 
 export interface EnemyEntity extends Entity {
