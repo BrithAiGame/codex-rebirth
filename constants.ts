@@ -1,4 +1,4 @@
-
+﻿
 
 import { KeyMap, Language } from "./types";
 
@@ -182,7 +182,15 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
   [Language.ZH_CN]: {
     GAME_TITLE: "胎渊",
     START_RUN: "开始游戏",
-    SETTINGS: "设置",
+    NEW_RUN: "新游戏",
+    CHARACTER_SELECT: "角色选择",
+    STARTER_INFO: "起始信息",
+    STARTER_ITEM_NONE: "无起始道具",
+    PASSIVE_HINT: "被动能力",
+    DIFFICULTY_TITLE: "难度",
+    DIFFICULTY_NORMAL: "普通",
+    DIFFICULTY_HARD: "困难",
+    CANCEL: "取消",    SETTINGS: "设置",
     HEALTH: "生命值",
     FLOOR: "层数",
     SCORE: "分数",
@@ -279,7 +287,15 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
   [Language.ZH_TW]: {
     GAME_TITLE: "胎淵",
     START_RUN: "開始遊戲",
-    SETTINGS: "設置",
+    NEW_RUN: "新遊戲",
+    CHARACTER_SELECT: "角色選擇",
+    STARTER_INFO: "起始資訊",
+    STARTER_ITEM_NONE: "無起始道具",
+    PASSIVE_HINT: "被動能力",
+    DIFFICULTY_TITLE: "難度",
+    DIFFICULTY_NORMAL: "普通",
+    DIFFICULTY_HARD: "困難",
+    CANCEL: "取消",    SETTINGS: "設置",
     HEALTH: "生命值",
     FLOOR: "層數",
     SCORE: "分數",
@@ -371,6 +387,15 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
   [Language.EN]: {
     GAME_TITLE: "BIRTH",
     START_RUN: "START GAME",
+    NEW_RUN: "NEW RUN",
+    CHARACTER_SELECT: "CHARACTER SELECT",
+    STARTER_INFO: "STARTER",
+    STARTER_ITEM_NONE: "No starter item",
+    PASSIVE_HINT: "Passive",
+    DIFFICULTY_TITLE: "DIFFICULTY",
+    DIFFICULTY_NORMAL: "Normal",
+    DIFFICULTY_HARD: "Hard",
+    CANCEL: "Cancel",
     SETTINGS: "SETTINGS",
     HEALTH: "HEALTH",
     FLOOR: "FLOOR",
@@ -463,7 +488,15 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
   [Language.RU]: {
     GAME_TITLE: "БЕЗДНА ИСТОКОВ",
     START_RUN: "НАЧАТЬ ИГРУ",
-    SETTINGS: "НАСТРОЙКИ",
+    NEW_RUN: "НОВАЯ ИГРА",
+    CHARACTER_SELECT: "ВЫБОР ПЕРСОНАЖА",
+    STARTER_INFO: "СТАРТ",
+    STARTER_ITEM_NONE: "Без стартового предмета",
+    PASSIVE_HINT: "Пассив",
+    DIFFICULTY_TITLE: "СЛОЖНОСТЬ",
+    DIFFICULTY_NORMAL: "Обычная",
+    DIFFICULTY_HARD: "Сложная",
+    CANCEL: "Отмена",    SETTINGS: "НАСТРОЙКИ",
     HEALTH: "ЗДОРОВЬЕ",
     FLOOR: "ЭТАЖ",
     SCORE: "СЧЕТ",
@@ -553,3 +586,7 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     NOTIF_RESTART: "РЕСТАРТ",
   }
 };
+
+
+
+

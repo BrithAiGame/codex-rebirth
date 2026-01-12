@@ -810,7 +810,7 @@ export class GameEngine {
           return;
       }
 
-      if (e.enemyType === EnemyType.CHASER || (e.enemyType === EnemyType.BOSS && distToPlayer > 100)) {
+      if (e.enemyType === EnemyType.CHASER) {
           if (e.timer % 5 === 0) {
             const dir = normalizeVector({ x: this.player.x - e.x, y: this.player.y - e.y });
             e.velocity = { x: dir.x * speed, y: dir.y * speed };

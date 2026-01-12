@@ -1,4 +1,4 @@
-
+﻿
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { Canvas, useThree, useFrame } from '@react-three/fiber';
 import { Stats } from '@react-three/drei';
@@ -148,7 +148,7 @@ const VirtualJoystick: React.FC<JoystickProps> = ({ onMove, color = 'white', lab
 // Utils
 const formatKey = (code: string) => {
     if (code.startsWith('Key')) return code.replace('Key', '');
-    if (code.startsWith('Arrow')) return code.replace('Arrow', '↑'); 
+    if (code.startsWith('Arrow')) return code.replace('Arrow', 'ARW-');
     if (code === 'Space') return 'SPC';
     if (code === 'Escape') return 'ESC';
     if (code === 'Enter') return 'ENT';
@@ -226,6 +226,11 @@ const ORDERED_KEYS = [
     'restart', 'pause', 'toggleFullscreen'
 ] as (keyof KeyMap)[];
 
+const DIFFICULTY_OPTIONS = [
+    { id: 'NORMAL', labelKey: 'DIFFICULTY_NORMAL' },
+    { id: 'HARD', labelKey: 'DIFFICULTY_HARD' }
+] as const;
+
 const SETTINGS_STORAGE_KEY = 'birth-settings';
 
 export default function App() {
@@ -257,6 +262,7 @@ export default function App() {
   const [menuSelection, setMenuSelection] = useState(0); 
   const [settingsSelection, setSettingsSelection] = useState(0);
   const [selectedCharIndex, setSelectedCharIndex] = useState(0);
+  const [difficultyIndex, setDifficultyIndex] = useState(0);
   const [floorTransition, setFloorTransition] = useState<{ phase: 'in' | 'out'; key: number } | null>(null);
   const floorRef = useRef<number | null>(null);
 
@@ -534,6 +540,8 @@ export default function App() {
            else if (status === GameStatus.CHARACTER_SELECT) {
                if (e.code === 'ArrowLeft') setSelectedCharIndex(p => (p - 1 + CHARACTERS.length) % CHARACTERS.length);
                if (e.code === 'ArrowRight') setSelectedCharIndex(p => (p + 1) % CHARACTERS.length);
+               if (e.code === 'ArrowUp') setDifficultyIndex(p => (p - 1 + DIFFICULTY_OPTIONS.length) % DIFFICULTY_OPTIONS.length);
+               if (e.code === 'ArrowDown') setDifficultyIndex(p => (p + 1) % DIFFICULTY_OPTIONS.length);
                if (isEnter) startGame();
                if (isEsc) setStatus(GameStatus.MENU);
            }
@@ -586,7 +594,7 @@ export default function App() {
                 <>
                     <div className="flex items-baseline gap-2">
                         <span className="text-amber-500 font-black text-2xl md:text-3xl tracking-tighter">
-                            第{gameStats?.floor || 1}层【{(gameStats?.floor || 1) <= 5 ? floorThemeLabel : '???'}】
+                            {t('FLOOR')} {gameStats?.floor || 1} [{(gameStats?.floor || 1) <= 5 ? floorThemeLabel : '???'}]
                         </span>
                     </div>
                     <div className="text-gray-400 font-bold text-sm md:text-base tracking-widest">{gameStats?.score || 0}</div>
@@ -606,10 +614,10 @@ export default function App() {
               <div ref={containerRef} className="flex-1 flex items-center justify-center p-2 relative w-full h-full">
                   {stats && isInGame && (
                       <div className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 z-40 flex flex-col gap-2">
-                          <AttributePill icon="🔫" value={`${fireRate}`} title="Fire Rate" />
-                          <AttributePill icon="🎯" value={`${range}`} title="Range" />
-                          <AttributePill icon="🏃" value={`${speed}`} title="Speed" />
-                          <AttributePill icon="💥" value={`${knockback}`} title="Knockback" />
+                          <AttributePill icon="馃敨" value={`${fireRate}`} title="Fire Rate" />
+                          <AttributePill icon="馃幆" value={`${range}`} title="Range" />
+                          <AttributePill icon="馃弮" value={`${speed}`} title="Speed" />
+                          <AttributePill icon="馃挜" value={`${knockback}`} title="Knockback" />
                       </div>
                   )}
                   <div 
@@ -710,28 +718,74 @@ export default function App() {
 
                         {/* CHARACTER SELECT */}
                         {status === GameStatus.CHARACTER_SELECT && (
-                            <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/95">
-                                <div className="flex items-center gap-8 mb-8">
-                                    <button onClick={() => setSelectedCharIndex(p => (p - 1 + CHARACTERS.length) % CHARACTERS.length)} className="text-6xl text-gray-600 hover:text-white">‹</button>
-                                    <div className="text-center">
-                                        <div className="w-32 h-32 mx-auto bg-gray-800 rounded-full mb-4 flex items-center justify-center border-4 border-gray-700 overflow-hidden">
-                                            <div className="transform scale-[2.5]"><SpritePreview spriteName={selectedChar.sprite} assetLoader={uiAssetLoader} /></div>
+                            <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/95 px-6">
+                                <div className="w-full max-w-5xl flex flex-col items-center">
+                                    <div className="w-full flex items-center justify-between text-xs text-gray-500 tracking-widest uppercase mb-4">
+                                        <span>LEFT / RIGHT</span>
+                                        <span>{t('NEW_RUN')}</span>
+                                        <span>UP / DOWN</span>
+                                    </div>
+
+                                    <div className="w-full grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-center gap-6 mb-8">
+                                        <div className="text-left space-y-3">
+                                            <div className="text-3xl font-black text-cyan-400">{t(selectedChar.nameKey)}</div>
+                                            <div className="text-gray-300 text-sm flex items-start gap-2">
+                                                <span className="text-yellow-400">INFO</span>
+                                                <span>{t(selectedChar.descKey)}</span>
+                                            </div>
+                                            <div className="flex flex-wrap gap-2 text-xs font-bold text-gray-300">
+                                                <span className="px-2 py-1 border border-gray-700 rounded">HP {Math.ceil(selectedChar.baseStats.hp / 2)}</span>
+                                                <span className="px-2 py-1 border border-gray-700 rounded">DMG {Math.round(selectedChar.baseStats.damage * 10) / 10}</span>
+                                                <span className="px-2 py-1 border border-gray-700 rounded">SPD {Math.round(selectedChar.baseStats.speed * 10) / 10}</span>
+                                                <span className="px-2 py-1 border border-gray-700 rounded">ROF {Math.max(0.1, Math.round((60 / selectedChar.baseStats.fireRate) * 10) / 10)}/s</span>
+                                                <span className="px-2 py-1 border border-gray-700 rounded">RNG {Math.round(selectedChar.baseStats.range)}</span>
+                                            </div>
                                         </div>
-                                        <div className="text-3xl font-black text-cyan-400 mb-2">{t(selectedChar.nameKey)}</div>
-                                        <div className="text-gray-400 h-12 text-sm max-w-[200px] mx-auto">{t(selectedChar.descKey)}</div>
-                                        <div className="mt-4 space-y-1 bg-gray-900 p-3 rounded border border-gray-700 w-64">
-                                            <StatBar label="HP" value={selectedChar.baseStats.hp} max={10} color="#ef4444" />
-                                            <StatBar label="DMG" value={selectedChar.baseStats.damage} max={6} color="#ef4444" />
-                                            <StatBar label="SPD" value={selectedChar.baseStats.speed} max={2.5} color="#3b82f6" />
+
+                                        <div className="flex items-center gap-6 justify-center">
+                                            <button onClick={() => setSelectedCharIndex(p => (p - 1 + CHARACTERS.length) % CHARACTERS.length)} className="text-6xl text-gray-600 hover:text-white">&lt;</button>
+                                            <div className="text-center">
+                                                <div className="w-32 h-32 mx-auto bg-gray-800 rounded-full mb-3 flex items-center justify-center border-4 border-gray-700 overflow-hidden">
+                                                    <div className="transform scale-[2.5]"><SpritePreview spriteName={selectedChar.sprite} assetLoader={uiAssetLoader} /></div>
+                                                </div>
+                                                <div className="text-xs text-gray-500 uppercase tracking-widest">{t('CHARACTER_SELECT')}</div>
+                                            </div>
+                                            <button onClick={() => setSelectedCharIndex(p => (p + 1) % CHARACTERS.length)} className="text-6xl text-gray-600 hover:text-white">&gt;</button>
+                                        </div>
+
+                                        <div className="text-left md:text-right space-y-2 text-sm text-gray-400">
+                                            <div className="uppercase tracking-widest text-xs text-gray-500">{t('STARTER_INFO')}</div>
+                                            <div>ITEM: {t('STARTER_ITEM_NONE')}</div>
+                                            <div>PASSIVE: {t('PASSIVE_HINT')}</div>
                                         </div>
                                     </div>
-                                    <button onClick={() => setSelectedCharIndex(p => (p + 1) % CHARACTERS.length)} className="text-6xl text-gray-600 hover:text-white">›</button>
+
+                                    <div className="w-full max-w-lg border-t border-gray-700 pt-5 mt-2">
+                                        <div className="text-xs text-gray-500 uppercase tracking-widest mb-3">{t('DIFFICULTY_TITLE')}</div>
+                                        <div className="flex flex-col gap-2">
+                                            {DIFFICULTY_OPTIONS.map((opt, idx) => {
+                                                const active = idx === difficultyIndex;
+                                                return (
+                                                    <button
+                                                        key={opt.id}
+                                                        onClick={() => setDifficultyIndex(idx)}
+                                                        className={`flex items-center justify-between px-4 py-2 border-2 text-sm font-bold transition-colors ${active ? 'border-white bg-white text-black' : 'border-gray-700 text-gray-300 hover:border-gray-500'}`}
+                                                    >
+                                                        <span>{t(opt.labelKey)}</span>
+                                                        <span className="text-xs text-gray-500">{active ? '[x]' : '[ ]'}</span>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-8 flex flex-col items-center">
+                                        <button className="px-10 py-3 bg-white text-black font-black text-2xl hover:bg-cyan-400 transition-colors" onClick={startGame}>{t('START_RUN')}</button>
+                                        <button className="mt-4 text-gray-500 hover:text-white underline" onClick={() => setStatus(GameStatus.MENU)}>{t('CANCEL')}</button>
+                                    </div>
                                 </div>
-                                <button className="px-10 py-3 bg-white text-black font-black text-2xl hover:bg-cyan-400 transition-colors" onClick={startGame}>START</button>
-                                <button className="mt-4 text-gray-500 hover:text-white underline" onClick={() => setStatus(GameStatus.MENU)}>CANCEL</button>
                             </div>
                         )}
-
                         {/* SETTINGS MODAL */}
                         {showSettings && (
                             <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/90 p-4">
@@ -965,3 +1019,6 @@ export default function App() {
     </div>
   );
 }
+
+
+
