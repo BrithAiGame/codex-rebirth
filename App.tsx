@@ -257,6 +257,8 @@ export default function App() {
     inventory?: ItemType[];
     keys?: number;
     bombs?: number;
+    screenFlashTimer?: number;
+    cameraShakeTimer?: number;
   } | null>(null);
   
   const [status, setStatus] = useState<GameStatus>(GameStatus.MENU);
@@ -569,6 +571,13 @@ export default function App() {
   const range = stats ? Math.round(stats.range) : null;
   const speed = stats ? Math.round(stats.speed * 10) / 10 : null;
   const knockback = stats ? Math.round(stats.knockback * 10) / 10 : null;
+  const shakeTimer = gameStats?.cameraShakeTimer ?? 0;
+  const flashTimer = gameStats?.screenFlashTimer ?? 0;
+  const shakeRatio = Math.min(1, shakeTimer / 16);
+  const shakePhase = shakeTimer * 0.9;
+  const shakeX = Math.sin(shakePhase * 7.3) * 10 * shakeRatio;
+  const shakeY = Math.cos(shakePhase * 9.1) * 8 * shakeRatio;
+  const flashOpacity = Math.min(1, flashTimer / 12);
 
   return (
     <div className="flex flex-col h-screen w-screen bg-[#050505] text-white select-none overflow-hidden" style={{ fontFamily: "'GameFontZh', monospace" }}>
@@ -628,8 +637,11 @@ export default function App() {
                   )}
                   <div 
                     className="relative shadow-2xl overflow-hidden bg-black border-4 border-neutral-800" 
-                    style={{ width: displayDims.width, height: displayDims.height }}
+                    style={{ width: displayDims.width, height: displayDims.height, transform: `translate(${shakeX}px, ${shakeY}px)` }}
                   >
+                        {flashTimer > 0 && (
+                            <div className="absolute inset-0 z-[80] bg-white pointer-events-none" style={{ opacity: flashOpacity }} />
+                        )}
                         {floorTransition && (
                             <div
                                 key={floorTransition.key}

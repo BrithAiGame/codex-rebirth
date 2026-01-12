@@ -20,8 +20,9 @@ interface RendererProps {
 const TILE_SIZE = CONSTANTS.TILE_SIZE;
 const ROOM_WIDTH = 15;
 const ROOM_HEIGHT = 9;
-const MAX_PARTICLES = 700;
+const MAX_PARTICLES = 1800;
 const AMBIENT_PARTICLES = 120;
+const MAX_EXPLOSIONS = 24;
 
 const ENEMY_VARIANTS: Record<string, { sprite: keyof typeof SPRITES; palette: string[] }> = {
     mantis: {
@@ -123,6 +124,14 @@ const to3D = (val: number, max: number) => {
 type Particle = {
     position: THREE.Vector3;
     velocity: THREE.Vector3;
+    life: number;
+    maxLife: number;
+    size: number;
+    color: THREE.Color;
+};
+
+type ExplosionRing = {
+    position: THREE.Vector3;
     life: number;
     maxLife: number;
     size: number;
@@ -724,7 +733,9 @@ const DungeonMesh: React.FC<{ engine: GameEngine, assets: AssetLoader }> = React
 const ParticleField: React.FC<{ engine: GameEngine }> = React.memo(({ engine }) => {
     const meshRef = useRef<THREE.InstancedMesh>(null);
     const ambientRef = useRef<THREE.InstancedMesh>(null);
+    const ringRef = useRef<THREE.InstancedMesh>(null);
     const particlesRef = useRef<Particle[]>([]);
+    const ringsRef = useRef<ExplosionRing[]>([]);
     const ambientRefData = useRef<AmbientParticle[]>([]);
     const prevProjectiles = useRef<Map<string, { pos: THREE.Vector3; ownerId: string }>>(new Map());
     const prevBombs = useRef<Map<string, THREE.Vector3>>(new Map());
@@ -732,7 +743,9 @@ const ParticleField: React.FC<{ engine: GameEngine }> = React.memo(({ engine }) 
     const roomKeyRef = useRef<string | null>(null);
     const dummy = useMemo(() => new THREE.Object3D(), []);
     const geom = useMemo(() => new THREE.SphereGeometry(0.1, 6, 6), []);
+    const ringGeom = useMemo(() => new THREE.RingGeometry(0.2, 0.5, 32), []);
     const material = useMemo(() => new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.95, toneMapped: false, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending }), []);
+    const ringMat = useMemo(() => new THREE.MeshBasicMaterial({ color: '#fbbf24', transparent: true, opacity: 0.9, toneMapped: false, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }), []);
     const ambientMat = useMemo(() => new THREE.MeshBasicMaterial({ color: '#374151', transparent: true, opacity: 0.45, toneMapped: false, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending }), []);
 
     const resetAmbient = () => {
@@ -774,6 +787,7 @@ const ParticleField: React.FC<{ engine: GameEngine }> = React.memo(({ engine }) 
         if (roomKeyRef.current !== roomKey) {
             roomKeyRef.current = roomKey;
             particlesRef.current = [];
+            ringsRef.current = [];
             prevProjectiles.current = new Map();
             prevBombs.current = new Map();
             prevFlash.current = new Map();
@@ -861,7 +875,33 @@ const ParticleField: React.FC<{ engine: GameEngine }> = React.memo(({ engine }) 
 
         prevBombs.current.forEach((pos, id) => {
             if (!currentBombs.has(id)) {
-                spawnBurst(pos, new THREE.Color('#f97316'), 28, 1.8, 0.8);
+                spawnBurst(pos, new THREE.Color('#f97316'), 60, 2.6, 0.9);
+                spawnBurst(pos, new THREE.Color('#fde047'), 40, 2.0, 0.7);
+                spawnBurst(pos, new THREE.Color('#fb7185'), 30, 2.2, 0.8);
+                spawnBurst(pos, new THREE.Color('#0ea5e9'), 22, 1.6, 0.7);
+                for (let i = 0; i < 18; i++) {
+                    spawnParticle(
+                        pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.4, 0, (Math.random() - 0.5) * 0.4)),
+                        new THREE.Vector3((Math.random() - 0.5) * 0.25, 0.45 + Math.random() * 0.35, (Math.random() - 0.5) * 0.25),
+                        1.2 + Math.random() * 0.6,
+                        0.22 + Math.random() * 0.15,
+                        new THREE.Color('#111827')
+                    );
+                }
+                ringsRef.current.push({
+                    position: pos.clone().setY(0.06),
+                    life: 0.7,
+                    maxLife: 0.7,
+                    size: 0.7,
+                    color: new THREE.Color('#fbbf24')
+                });
+                ringsRef.current.push({
+                    position: pos.clone().setY(0.08),
+                    life: 0.9,
+                    maxLife: 0.9,
+                    size: 1.1,
+                    color: new THREE.Color('#f97316')
+                });
             }
         });
         prevBombs.current = currentBombs;
@@ -879,6 +919,17 @@ const ParticleField: React.FC<{ engine: GameEngine }> = React.memo(({ engine }) 
             p.position.addScaledVector(p.velocity, dt);
         }
 
+        const rings = ringsRef.current;
+        for (let i = rings.length - 1; i >= 0; i--) {
+            const r = rings[i];
+            r.life -= dt;
+            if (r.life <= 0) {
+                rings[i] = rings[rings.length - 1];
+                rings.pop();
+                continue;
+            }
+        }
+
         if (meshRef.current) {
             const count = Math.min(particles.length, MAX_PARTICLES);
             for (let i = 0; i < count; i++) {
@@ -894,11 +945,30 @@ const ParticleField: React.FC<{ engine: GameEngine }> = React.memo(({ engine }) 
             meshRef.current.instanceMatrix.needsUpdate = true;
             if (meshRef.current.instanceColor) meshRef.current.instanceColor.needsUpdate = true;
         }
+
+        if (ringRef.current) {
+            const count = Math.min(rings.length, MAX_EXPLOSIONS);
+            for (let i = 0; i < count; i++) {
+                const r = rings[i];
+                const t = 1 - (r.life / r.maxLife);
+                const scale = r.size * (0.6 + t * 2.2);
+                dummy.position.copy(r.position);
+                dummy.scale.set(scale, scale, scale);
+                dummy.rotation.set(-Math.PI / 2, 0, 0);
+                dummy.updateMatrix();
+                ringRef.current.setMatrixAt(i, dummy.matrix);
+                ringRef.current.setColorAt(i, r.color.clone().multiplyScalar(1.2 - t));
+            }
+            ringRef.current.count = count;
+            ringRef.current.instanceMatrix.needsUpdate = true;
+            if (ringRef.current.instanceColor) ringRef.current.instanceColor.needsUpdate = true;
+        }
     });
 
     return (
         <group>
             <instancedMesh ref={ambientRef} args={[geom, ambientMat, AMBIENT_PARTICLES]} />
+            <instancedMesh ref={ringRef} args={[ringGeom, ringMat, MAX_EXPLOSIONS]} />
             <instancedMesh ref={meshRef} args={[geom, material, MAX_PARTICLES]} />
         </group>
     );

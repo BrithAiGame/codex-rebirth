@@ -37,6 +37,8 @@ export class GameEngine {
   // Notification system
   notification: string | null = null;
   notificationTimer: number = 0;
+  screenFlashTimer: number = 0;
+  cameraShakeTimer: number = 0;
   
   // Restart Logic
   restartTimer: number = 0;
@@ -555,6 +557,8 @@ export class GameEngine {
   explodeBomb(bomb: BombEntity) {
       if (!this.currentRoom) return;
       bomb.markedForDeletion = true;
+      this.screenFlashTimer = Math.max(this.screenFlashTimer, 12);
+      this.cameraShakeTimer = Math.max(this.cameraShakeTimer, 16);
 
       const ts = CONSTANTS.TILE_SIZE;
       const center = { x: bomb.x + bomb.w / 2, y: bomb.y + bomb.h / 2 };
@@ -693,6 +697,8 @@ export class GameEngine {
           keys: this.player.keys,
           bombs: this.player.bombs,
           notification: this.notification,
+          screenFlashTimer: this.screenFlashTimer,
+          cameraShakeTimer: this.cameraShakeTimer,
           dungeon: this.dungeon.map(r => ({x: r.x, y: r.y, type: r.type, visited: r.visited})),
           currentRoomPos: this.currentRoom ? {x: this.currentRoom.x, y: this.currentRoom.y} : {x:0, y:0},
           stats: this.player.stats,
@@ -743,6 +749,8 @@ export class GameEngine {
             this.notification = null;
         }
     }
+    if (this.screenFlashTimer > 0) this.screenFlashTimer--;
+    if (this.cameraShakeTimer > 0) this.cameraShakeTimer--;
 
     if (this.currentRoom?.doorAnim) {
         const doorAnim = this.currentRoom.doorAnim;
