@@ -2,7 +2,7 @@
 import React, { useRef, useMemo, useState, useEffect, useLayoutEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { GameEngine } from './game';
-import { Entity, EntityType, PlayerEntity, EnemyEntity, ProjectileEntity, ItemEntity } from './types';
+import { Entity, EntityType, PlayerEntity, EnemyEntity, ProjectileEntity, ItemEntity, Room } from './types';
 import { CONSTANTS } from './constants';
 import * as THREE from 'three';
 import { AssetLoader } from './assets';
@@ -305,6 +305,8 @@ const EntityGroup: React.FC<{ entity: Entity, engine: GameEngine }> = React.memo
     const groupRef = useRef<THREE.Group>(null);
     const rotationRef = useRef(0);
     const bobOffset = useRef(Math.random() * 100);
+    const itemSpinRef = useRef<THREE.Group>(null);
+    const itemHeartsRef = useRef<THREE.Group>(null);
 
     // Calculate dimensions
     const width = entity.w / TILE_SIZE;
@@ -373,8 +375,14 @@ const EntityGroup: React.FC<{ entity: Entity, engine: GameEngine }> = React.memo
                 // Let's assume we WANT the rotation, even if it reveals the side profile.
                 groupRef.current.rotation.y = rotationRef.current;
             } else if (entity.type === EntityType.ITEM) {
-                // Spin items
-                groupRef.current.rotation.y += 0.02;
+                // Spin items only, keep overlays fixed
+                if (itemSpinRef.current) itemSpinRef.current.rotation.y += 0.02;
+                groupRef.current.rotation.y = 0;
+                if (itemHeartsRef.current) {
+                    const camForward = new THREE.Vector3(0, 0, -1).applyQuaternion(engine.cameraQuaternion).normalize();
+                    const offset = camForward.multiplyScalar(-0.25);
+                    itemHeartsRef.current.position.set(offset.x, -0.25, offset.z);
+                }
             } else {
                 groupRef.current.rotation.y = 0;
             }
@@ -442,14 +450,16 @@ const EntityGroup: React.FC<{ entity: Entity, engine: GameEngine }> = React.memo
         const startX = -((heartCount - 1) * heartSpacing) / 2;
         return (
             <group ref={groupRef}>
-                <VoxelMesh 
-                    spriteMatrix={spriteMatrix} 
-                    colors={palette} 
-                    scaleFactor={width} 
-                    flash={!!isFlash} 
-                />
+                <group ref={itemSpinRef}>
+                    <VoxelMesh 
+                        spriteMatrix={spriteMatrix} 
+                        colors={palette} 
+                        scaleFactor={width} 
+                        flash={!!isFlash} 
+                    />
+                </group>
                 {heartCount > 0 && (
-                    <group position={[0, -0.25, 0]}>
+                    <group ref={itemHeartsRef}>
                         {Array.from({ length: heartCount }).map((_, i) => (
                             <mesh key={`heart-${entity.id}-${i}`} position={[startX + i * heartSpacing, 0, 0]}>
                                 <boxGeometry args={[0.08, 0.08, 0.04]} />
@@ -586,7 +596,12 @@ const DungeonMesh: React.FC<{ engine: GameEngine, assets: AssetLoader }> = React
         ? (room.doorAnim.state === 'open' ? 1 : room.doorAnim.state === 'closed' ? 0 : room.doorAnim.t)
         : (room.cleared ? 1 : 0);
 
-    const createShutterDoor = (x: number, z: number, rotY: number, key: string) => {
+    const getNeighborType = (dx: number, dy: number): Room['type'] | null => {
+        const nextRoom = engine.dungeon.find(r => r.x === room.x + dx && r.y === room.y + dy);
+        return nextRoom ? nextRoom.type : null;
+    };
+
+    const createShutterDoor = (x: number, z: number, rotY: number, key: string, neighborType: Room['type'] | null) => {
         const doorWidth = 3;
         const doorHeight = 1;
         const frameDepth = 0.18;
@@ -596,8 +611,12 @@ const DungeonMesh: React.FC<{ engine: GameEngine, assets: AssetLoader }> = React
         const openShift = (doorWidth / 2) + (panelWidth / 2) - 0.05;
         const closedShift = panelWidth / 2;
         const panelShift = closedShift + (openShift - closedShift) * doorOpenT;
-        const isOpen = room.doorAnim?.state === 'open' || (!room.doorAnim && room.cleared);
-        const indicatorColor = isOpen ? '#22c55e' : '#ef4444';
+        const isLocked = !room.cleared && room.type !== 'START' && room.type !== 'CHEST' && room.type !== 'DEVIL';
+        const canPass = !isLocked;
+        let indicatorColor = canPass ? '#22c55e' : '#ef4444';
+        if (canPass && neighborType === 'CHEST' && room.type !== 'CHEST') {
+            indicatorColor = '#fbbf24';
+        }
 
         return (
             <group key={`door-${key}`} position={[x, 0.5, z]} rotation={[0, rotY, 0]}>
@@ -632,16 +651,16 @@ const DungeonMesh: React.FC<{ engine: GameEngine, assets: AssetLoader }> = React
     };
 
     if (room.doors.UP) {
-        wallMeshes.push(createShutterDoor(0, -((ROOM_HEIGHT-1)/2) + 0.5, 0, 'u'));
+        wallMeshes.push(createShutterDoor(0, -((ROOM_HEIGHT-1)/2) + 0.5, 0, 'u', getNeighborType(0, -1)));
     }
     if (room.doors.DOWN) {
-        wallMeshes.push(createShutterDoor(0, ((ROOM_HEIGHT-1)/2) - 0.5, 0, 'd'));
+        wallMeshes.push(createShutterDoor(0, ((ROOM_HEIGHT-1)/2) - 0.5, 0, 'd', getNeighborType(0, 1)));
     }
     if (room.doors.LEFT) {
-        wallMeshes.push(createShutterDoor(-((ROOM_WIDTH-1)/2) + 0.5, 0, Math.PI/2, 'l'));
+        wallMeshes.push(createShutterDoor(-((ROOM_WIDTH-1)/2) + 0.5, 0, Math.PI/2, 'l', getNeighborType(-1, 0)));
     }
     if (room.doors.RIGHT) {
-        wallMeshes.push(createShutterDoor(((ROOM_WIDTH-1)/2) - 0.5, 0, Math.PI/2, 'r'));
+        wallMeshes.push(createShutterDoor(((ROOM_WIDTH-1)/2) - 0.5, 0, Math.PI/2, 'r', getNeighborType(1, 0)));
     }
 
     return (

@@ -1356,11 +1356,6 @@ export class GameEngine {
           this.notificationTimer = 120;
       }
 
-      if (item.costHearts && item.costHearts > 0) {
-          this.player.stats.maxHp = Math.max(1, this.player.stats.maxHp - item.costHearts);
-          this.player.stats.hp = Math.min(this.player.stats.hp, this.player.stats.maxHp);
-      }
-
       // Apply Stats
       const s = config.stats;
       const pStats = this.player.stats;
@@ -1375,6 +1370,11 @@ export class GameEngine {
       if (s.bulletScale) pStats.bulletScale += s.bulletScale;
       if (s.knockback) pStats.knockback *= s.knockback;
       if (s.shotSpread) pStats.shotSpread = s.shotSpread;
+
+      if (item.costHearts && item.costHearts > 0) {
+          pStats.maxHp = Math.max(1, pStats.maxHp - item.costHearts);
+          pStats.hp = Math.min(pStats.hp, pStats.maxHp);
+      }
 
       // Safe guards
       if (pStats.maxHp < 1) pStats.maxHp = 1;
