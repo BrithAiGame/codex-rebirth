@@ -413,7 +413,7 @@ export default function App() {
 
   const startGame = () => {
     if (engineRef.current) {
-      engineRef.current.startNewGame(CHARACTERS[selectedCharIndex].id);
+      engineRef.current.startNewGame(CHARACTERS[selectedCharIndex].id, DIFFICULTY_OPTIONS[difficultyIndex].id);
       setStatus(GameStatus.PLAYING);
       setShowSettings(false);
     }

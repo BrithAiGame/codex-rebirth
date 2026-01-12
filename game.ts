@@ -48,6 +48,7 @@ export class GameEngine {
   characterId: string = 'alpha';
   floorThemeId: number | null = null;
   floorThemeLabel: string | null = null;
+  difficulty: 'NORMAL' | 'HARD' = 'NORMAL';
 
   // Callback to sync React UI
   onUiUpdate: (stats: any) => void;
@@ -63,8 +64,9 @@ export class GameEngine {
     this.player = this.createPlayer('alpha');
   }
 
-  startNewGame(characterId: string = 'alpha') {
+  startNewGame(characterId: string = 'alpha', difficulty: 'NORMAL' | 'HARD' = 'NORMAL') {
     this.characterId = characterId;
+    this.difficulty = difficulty;
     this.floorLevel = 1;
     this.score = 0;
     this.baseSeed = Math.floor(Math.random() * 1000000); // Initial random seed for the run
@@ -78,6 +80,10 @@ export class GameEngine {
       if (this.status === GameStatus.PAUSED) {
           this.status = GameStatus.PLAYING;
       }
+  }
+
+  getEnemyDifficultyMultiplier() {
+      return this.difficulty === 'HARD' ? 3 : 1;
   }
 
   createPlayer(characterId: string): PlayerEntity {
@@ -298,10 +304,12 @@ export class GameEngine {
 
         if (!valid) continue;
 
-        const hp = config.hpBase + (this.floorLevel * config.hpPerLevel);
+        const diffMult = this.getEnemyDifficultyMultiplier();
+        const hp = (config.hpBase * diffMult) + (this.floorLevel * config.hpPerLevel * diffMult);
 
         const canShoot = config.shotSpeed > 0 || config.range > 0;
-        const fireRate = canShoot ? scaleEnemyShootInterval(config.fireRate) : config.fireRate;
+        const baseFireRate = canShoot ? scaleEnemyShootInterval(config.fireRate) : config.fireRate;
+        const fireRate = canShoot ? Math.max(5, Math.round(baseFireRate / diffMult)) : baseFireRate;
 
         const enemy: EnemyEntity = {
             id: uuid(),
@@ -321,11 +329,11 @@ export class GameEngine {
             orbitAngle: rng.next() * Math.PI * 2,
             flying: config.flying,
             stats: {
-                speed: config.speed,
-                damage: config.damage,
+                speed: config.speed * diffMult,
+                damage: config.damage * diffMult,
                 fireRate,
-                shotSpeed: config.shotSpeed,
-                range: config.range
+                shotSpeed: config.shotSpeed * diffMult,
+                range: config.range * diffMult
             },
             visualZ: config.flying ? 20 : 0
         };
@@ -337,7 +345,11 @@ export class GameEngine {
       const seed = this.currentRoom ? this.currentRoom.seed + 777 : Math.random() * 100000;
       const rng = new SeededRNG(seed);
       const config = rng.weightedChoice(BOSSES) || BOSSES[0];
-      const hp = config.hpBase + (this.floorLevel * config.hpPerLevel);
+      const diffMult = this.getEnemyDifficultyMultiplier();
+      const hp = (config.hpBase * diffMult) + (this.floorLevel * config.hpPerLevel * diffMult);
+      const canShoot = config.shotSpeed > 0 || config.range > 0;
+      const baseFireRate = canShoot ? scaleEnemyShootInterval(config.fireRate) : config.fireRate;
+      const fireRate = canShoot ? Math.max(5, Math.round(baseFireRate / diffMult)) : baseFireRate;
       const boss: EnemyEntity = {
           id: uuid(),
           type: EntityType.ENEMY,
@@ -357,11 +369,11 @@ export class GameEngine {
           bossPhase: 0,
           bossSpin: 0,
           stats: {
-              speed: config.speed,
-              damage: config.damage,
-              fireRate: config.fireRate,
-              shotSpeed: config.shotSpeed,
-              range: config.range
+              speed: config.speed * diffMult,
+              damage: config.damage * diffMult,
+              fireRate,
+              shotSpeed: config.shotSpeed * diffMult,
+              range: config.range * diffMult
           },
           visualZ: 40 // Hover high
       };

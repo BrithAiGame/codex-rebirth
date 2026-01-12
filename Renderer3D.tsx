@@ -20,6 +20,8 @@ interface RendererProps {
 const TILE_SIZE = CONSTANTS.TILE_SIZE;
 const ROOM_WIDTH = 15;
 const ROOM_HEIGHT = 9;
+const MAX_PARTICLES = 700;
+const AMBIENT_PARTICLES = 120;
 
 const ENEMY_VARIANTS: Record<string, { sprite: keyof typeof SPRITES; palette: string[] }> = {
     mantis: {
@@ -116,6 +118,20 @@ const BOSS_PALETTES: Record<string, string[]> = {
 // Helper: Convert Logical Pixel Coordinate to 3D World Coordinate
 const to3D = (val: number, max: number) => {
     return (val / TILE_SIZE) - (max / TILE_SIZE / 2);
+};
+
+type Particle = {
+    position: THREE.Vector3;
+    velocity: THREE.Vector3;
+    life: number;
+    maxLife: number;
+    size: number;
+    color: THREE.Color;
+};
+
+type AmbientParticle = {
+    position: THREE.Vector3;
+    velocity: THREE.Vector3;
 };
 
 const MAX_PROJECTILE_INSTANCES = 1500;
@@ -679,6 +695,173 @@ const DungeonMesh: React.FC<{ engine: GameEngine, assets: AssetLoader }> = React
     );
 });
 
+const ParticleField: React.FC<{ engine: GameEngine }> = React.memo(({ engine }) => {
+    const meshRef = useRef<THREE.InstancedMesh>(null);
+    const ambientRef = useRef<THREE.InstancedMesh>(null);
+    const particlesRef = useRef<Particle[]>([]);
+    const ambientRefData = useRef<AmbientParticle[]>([]);
+    const prevProjectiles = useRef<Map<string, { pos: THREE.Vector3; ownerId: string }>>(new Map());
+    const prevFlash = useRef<Map<string, number>>(new Map());
+    const roomKeyRef = useRef<string | null>(null);
+    const dummy = useMemo(() => new THREE.Object3D(), []);
+    const geom = useMemo(() => new THREE.SphereGeometry(0.1, 6, 6), []);
+    const material = useMemo(() => new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.95, toneMapped: false, depthWrite: false, blending: THREE.AdditiveBlending }), []);
+    const ambientMat = useMemo(() => new THREE.MeshBasicMaterial({ color: '#374151', transparent: true, opacity: 0.45, toneMapped: false, depthWrite: false, blending: THREE.AdditiveBlending }), []);
+
+    const resetAmbient = () => {
+        ambientRefData.current = [];
+        const halfW = (ROOM_WIDTH - 1) / 2;
+        const halfH = (ROOM_HEIGHT - 1) / 2;
+        for (let i = 0; i < AMBIENT_PARTICLES; i++) {
+            const x = (Math.random() * 2 - 1) * halfW;
+            const z = (Math.random() * 2 - 1) * halfH;
+            const y = 0.15 + Math.random() * 0.5;
+            ambientRefData.current.push({
+                position: new THREE.Vector3(x, y, z),
+                velocity: new THREE.Vector3((Math.random() - 0.5) * 0.02, 0.01 + Math.random() * 0.02, (Math.random() - 0.5) * 0.02)
+            });
+        }
+    };
+
+    const spawnParticle = (pos: THREE.Vector3, vel: THREE.Vector3, life: number, size: number, color: THREE.Color) => {
+        if (particlesRef.current.length >= MAX_PARTICLES) return;
+        particlesRef.current.push({
+            position: pos.clone(),
+            velocity: vel.clone(),
+            life,
+            maxLife: life,
+            size,
+            color: color.clone()
+        });
+    };
+
+    const spawnBurst = (pos: THREE.Vector3, color: THREE.Color, count: number, speed: number, life: number) => {
+        for (let i = 0; i < count; i++) {
+            const dir = new THREE.Vector3(Math.random() - 0.5, Math.random() * 0.8, Math.random() - 0.5).normalize();
+            spawnParticle(pos, dir.multiplyScalar(speed * (0.6 + Math.random() * 0.8)), life * (0.6 + Math.random() * 0.6), 0.06 + Math.random() * 0.08, color);
+        }
+    };
+
+    useFrame((state) => {
+        const roomKey = engine.currentRoom ? `${engine.currentRoom.x},${engine.currentRoom.y}` : 'void';
+        if (roomKeyRef.current !== roomKey) {
+            roomKeyRef.current = roomKey;
+            particlesRef.current = [];
+            prevProjectiles.current = new Map();
+            prevFlash.current = new Map();
+            resetAmbient();
+        }
+
+        const dt = Math.min(0.05, state.clock.getDelta());
+
+        if (ambientRef.current) {
+            const halfW = (ROOM_WIDTH - 1) / 2;
+            const halfH = (ROOM_HEIGHT - 1) / 2;
+            ambientRefData.current.forEach((p, i) => {
+                p.position.addScaledVector(p.velocity, dt * 6);
+                if (p.position.x < -halfW) p.position.x = halfW;
+                if (p.position.x > halfW) p.position.x = -halfW;
+                if (p.position.z < -halfH) p.position.z = halfH;
+                if (p.position.z > halfH) p.position.z = -halfH;
+                if (p.position.y > 1.2) p.position.y = 0.1;
+                dummy.position.copy(p.position);
+                dummy.scale.setScalar(0.35);
+                dummy.updateMatrix();
+                ambientRef.current.setMatrixAt(i, dummy.matrix);
+            });
+            ambientRef.current.count = ambientRefData.current.length;
+            ambientRef.current.instanceMatrix.needsUpdate = true;
+        }
+
+        const currentProjectiles = new Map<string, { pos: THREE.Vector3; ownerId: string }>();
+        const entities = engine.entities as Entity[];
+
+        for (let i = 0; i < entities.length; i++) {
+            const ent = entities[i];
+            if (ent.type === EntityType.PROJECTILE) {
+                const p = ent as ProjectileEntity;
+                const cx = p.x + p.w / 2;
+                const cy = p.y + p.h / 2;
+                const pos = new THREE.Vector3(to3D(cx, CONSTANTS.CANVAS_WIDTH), (p.w / TILE_SIZE) / 2, to3D(cy, CONSTANTS.CANVAS_HEIGHT));
+                currentProjectiles.set(p.id, { pos, ownerId: p.ownerId });
+
+                const prev = prevProjectiles.current.get(p.id);
+                if (prev) {
+                    const dir = pos.clone().sub(prev.pos);
+                const dist = dir.length();
+                if (dist > 0.01) {
+                    const color = new THREE.Color(p.ownerId === 'player' ? CONSTANTS.COLORS.PROJECTILE_FRIENDLY : CONSTANTS.COLORS.PROJECTILE_ENEMY);
+                    const steps = Math.min(3, Math.ceil(dist / 0.12));
+                    for (let s = 0; s < steps; s++) {
+                        const t = (s + 1) / (steps + 1);
+                        const trailPos = prev.pos.clone().lerp(pos, t);
+                        spawnParticle(trailPos, new THREE.Vector3(0, 0.03, 0), 0.45, 0.08, color);
+                    }
+                }
+            }
+            } else if (ent.type === EntityType.ENEMY || ent.type === EntityType.PLAYER) {
+                const last = prevFlash.current.get(ent.id) || 0;
+                const current = ent.flashTimer || 0;
+                if (current > 0 && last <= 0) {
+                    const cx = ent.x + ent.w / 2;
+                    const cy = ent.y + ent.h / 2;
+                    const pos = new THREE.Vector3(to3D(cx, CONSTANTS.CANVAS_WIDTH), (ent.w / TILE_SIZE) / 2 + 0.1, to3D(cy, CONSTANTS.CANVAS_HEIGHT));
+                    const color = new THREE.Color(ent.type === EntityType.PLAYER ? '#93c5fd' : '#fbbf24');
+                    spawnBurst(pos, color, 10, 0.8, 0.5);
+                }
+                prevFlash.current.set(ent.id, current);
+            }
+        }
+
+        prevProjectiles.current.forEach((prev, id) => {
+            if (!currentProjectiles.has(id)) {
+                const color = new THREE.Color(prev.ownerId === 'player' ? '#60a5fa' : '#f97316');
+                const burstCount = prev.ownerId === 'player' ? 10 : 18;
+                const speed = prev.ownerId === 'player' ? 1.0 : 1.4;
+                spawnBurst(prev.pos, color, burstCount, speed, 0.6);
+            }
+        });
+
+        prevProjectiles.current = currentProjectiles;
+
+        const particles = particlesRef.current;
+        for (let i = particles.length - 1; i >= 0; i--) {
+            const p = particles[i];
+            p.life -= dt;
+            if (p.life <= 0) {
+                particles[i] = particles[particles.length - 1];
+                particles.pop();
+                continue;
+            }
+            p.velocity.multiplyScalar(0.96);
+            p.position.addScaledVector(p.velocity, dt);
+        }
+
+        if (meshRef.current) {
+            const count = Math.min(particles.length, MAX_PARTICLES);
+            for (let i = 0; i < count; i++) {
+                const p = particles[i];
+                const scale = p.size * (p.life / p.maxLife);
+                dummy.position.copy(p.position);
+                dummy.scale.setScalar(scale);
+                dummy.updateMatrix();
+                meshRef.current.setMatrixAt(i, dummy.matrix);
+                meshRef.current.setColorAt(i, p.color);
+            }
+            meshRef.current.count = count;
+            meshRef.current.instanceMatrix.needsUpdate = true;
+            if (meshRef.current.instanceColor) meshRef.current.instanceColor.needsUpdate = true;
+        }
+    });
+
+    return (
+        <group>
+            <instancedMesh ref={ambientRef} args={[geom, ambientMat, AMBIENT_PARTICLES]} />
+            <instancedMesh ref={meshRef} args={[geom, material, MAX_PARTICLES]} />
+        </group>
+    );
+});
+
 export const GameScene: React.FC<RendererProps> = ({ engine }) => {
     const { camera } = useThree();
 
@@ -704,6 +887,7 @@ export const GameScene: React.FC<RendererProps> = ({ engine }) => {
                 <DungeonMesh engine={engine} assets={engine.assets} />
             </group>
 
+            <ParticleField engine={engine} />
             <ProjectileField engine={engine} />
             <EntityGroup key={engine.player.id} entity={engine.player} engine={engine} />
             

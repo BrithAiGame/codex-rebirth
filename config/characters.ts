@@ -21,7 +21,7 @@ export const CHARACTERS: CharacterConfig[] = [
     baseStats: {
       hp: 6, // 3 Hearts
       maxHp: 6,
-      speed: 1.44,
+      speed: 2.88,
       damage: 3.5,
       fireRate: 55,
       shotSpeed: 2.52,
@@ -40,7 +40,7 @@ export const CHARACTERS: CharacterConfig[] = [
     baseStats: {
       hp: 10, // 5 Hearts
       maxHp: 10,
-      speed: 1.0, // Slow
+      speed: 2.0, // Slow
       damage: 4.5, // High Damage
       fireRate: 70, // Slow Fire
       shotSpeed: 2.0,
@@ -59,7 +59,7 @@ export const CHARACTERS: CharacterConfig[] = [
     baseStats: {
       hp: 4, // 2 Hearts
       maxHp: 4,
-      speed: 2.0, // Very Fast
+      speed: 4.0, // Very Fast
       damage: 2.5, // Low Damage
       fireRate: 30, // Fast Fire
       shotSpeed: 3.5, // Fast bullets
@@ -78,7 +78,7 @@ export const CHARACTERS: CharacterConfig[] = [
     baseStats: {
       hp: 6,
       maxHp: 6,
-      speed: 1.3,
+      speed: 2.6,
       damage: 3.0,
       fireRate: 90, // Very Slow
       shotSpeed: 2.2,
@@ -97,7 +97,7 @@ export const CHARACTERS: CharacterConfig[] = [
     baseStats: {
       hp: 4,
       maxHp: 4,
-      speed: 1.4,
+      speed: 2.8,
       damage: 6.0, // Huge Damage
       fireRate: 80, // Slow
       shotSpeed: 5.0, // Instant
@@ -116,7 +116,7 @@ export const CHARACTERS: CharacterConfig[] = [
     baseStats: {
       hp: 6,
       maxHp: 6,
-      speed: 1.5,
+      speed: 3.0,
       damage: 2.0, // Low Damage
       fireRate: 100, // Slow cooldown...
       shotSpeed: 2.5,
@@ -135,7 +135,7 @@ export const CHARACTERS: CharacterConfig[] = [
     baseStats: {
       hp: 2, // 1 Heart (Glass Cannon)
       maxHp: 2,
-      speed: 1.6,
+      speed: 3.2,
       damage: 5.0,
       fireRate: 40,
       shotSpeed: 3.0,
