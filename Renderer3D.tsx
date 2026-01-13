@@ -2,7 +2,7 @@
 import React, { useRef, useMemo, useState, useEffect, useLayoutEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { GameEngine } from './game';
-import { Entity, EntityType, PlayerEntity, EnemyEntity, ProjectileEntity, ItemEntity, BombEntity, Room } from './types';
+import { Entity, EntityType, PlayerEntity, EnemyEntity, ProjectileEntity, ItemEntity, BombEntity, RemotePlayerEntity, Room } from './types';
 import { CONSTANTS } from './constants';
 import * as THREE from 'three';
 import { AssetLoader } from './assets';
@@ -237,8 +237,9 @@ const getEntityAssetData = (e: Entity, engine: GameEngine) => {
     let spriteMatrix = SPRITES.PLAYER; // Default
     let palette = ['', '#fff', '#ccc', '#888'];
 
-    if (e.type === EntityType.PLAYER) {
-        const char = CHARACTERS.find(c => c.id === engine.characterId);
+    if (e.type === EntityType.PLAYER || e.type === EntityType.REMOTE_PLAYER) {
+        const characterId = e.type === EntityType.PLAYER ? engine.characterId : (e as RemotePlayerEntity).characterId;
+        const char = CHARACTERS.find(c => c.id === characterId);
         if (char) {
             spriteMatrix = SPRITES[char.sprite as keyof typeof SPRITES] || SPRITES.PLAYER;
             // Map Character Palette
@@ -366,7 +367,7 @@ const EntityGroup: React.FC<{ entity: Entity, engine: GameEngine }> = React.memo
             groupRef.current.position.set(x, y, z);
 
             // Rotation Logic
-            if (entity.type === EntityType.PLAYER || entity.type === EntityType.ENEMY) {
+    if (entity.type === EntityType.PLAYER || entity.type === EntityType.REMOTE_PLAYER || entity.type === EntityType.ENEMY) {
                 // Face movement direction
                 const vx = entity.velocity.x;
                 const vy = entity.velocity.y;
@@ -1003,7 +1004,7 @@ export const GameScene: React.FC<RendererProps> = ({ engine }) => {
             <ProjectileField engine={engine} />
             <EntityGroup key={engine.player.id} entity={engine.player} engine={engine} />
             
-            {engine.entities.filter(ent => ent.type !== EntityType.PROJECTILE).map(ent => (
+            {[...engine.entities.filter(ent => ent.type !== EntityType.PROJECTILE), ...Array.from(engine.remotePlayers.values())].map(ent => (
                 <EntityGroup key={ent.id} entity={ent} engine={engine} />
             ))}
         </group>

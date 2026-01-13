@@ -8,6 +8,7 @@ export interface Vector2 {
 // Enums
 export enum EntityType {
   PLAYER = 'PLAYER',
+  REMOTE_PLAYER = 'REMOTE_PLAYER',
   ENEMY = 'ENEMY',
   PROJECTILE = 'PROJECTILE',
   ITEM = 'ITEM',
@@ -174,6 +175,12 @@ export interface ItemEntity extends Entity {
 export interface BombEntity extends Entity {
   timer: number;
   ownerId: string;
+  fxOnly?: boolean;
+}
+
+export interface RemotePlayerEntity extends Entity {
+  playerId: string;
+  characterId: string;
 }
 
 export interface Room {

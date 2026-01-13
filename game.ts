@@ -1,7 +1,7 @@
 
 import { CONSTANTS } from './constants';
 import { 
-  Entity, PlayerEntity, EnemyEntity, ProjectileEntity, ItemEntity, BombEntity,
+  Entity, PlayerEntity, EnemyEntity, ProjectileEntity, ItemEntity, BombEntity, RemotePlayerEntity,
   EntityType, EnemyType, Direction, Stats, ItemType, GameStatus, Room, Rect, Vector2 
 } from './types';
 import { uuid, checkAABB, distance, normalizeVector, SeededRNG } from './utils';
@@ -30,6 +30,7 @@ export class GameEngine {
   score: number = 0;
   
   player: PlayerEntity;
+  remotePlayers: Map<string, RemotePlayerEntity> = new Map();
   entities: Entity[] = [];
   currentRoom: Room | null = null;
   dungeon: Room[] = [];
@@ -73,6 +74,18 @@ export class GameEngine {
     this.floorLevel = 1;
     this.score = 0;
     this.baseSeed = Math.floor(Math.random() * 1000000); // Initial random seed for the run
+    this.player = this.createPlayer(characterId);
+    this.loadFloor(1);
+    this.status = GameStatus.PLAYING;
+    this.restartTimer = 0;
+  }
+
+  startNetworkGame(baseSeed: number, characterId: string = 'alpha', difficulty: 'NORMAL' | 'HARD' = 'NORMAL') {
+    this.characterId = characterId;
+    this.difficulty = difficulty;
+    this.floorLevel = 1;
+    this.score = 0;
+    this.baseSeed = baseSeed;
     this.player = this.createPlayer(characterId);
     this.loadFloor(1);
     this.status = GameStatus.PLAYING;
@@ -179,6 +192,7 @@ export class GameEngine {
 
     // Clear dynamic entities
     this.entities = [];
+    this.remotePlayers.clear();
 
     // Position Player based on entry direction (Movement Direction)
     const cx = CONSTANTS.CANVAS_WIDTH / 2;
@@ -268,6 +282,31 @@ export class GameEngine {
     }
 
     room.visited = true;
+  }
+
+  syncRemotePlayers(players: { id: string; x: number; y: number; w: number; h: number; characterId: string }[]) {
+    const next = new Map<string, RemotePlayerEntity>();
+    players.forEach(p => {
+      const prev = this.remotePlayers.get(p.id);
+      const vx = prev ? p.x - prev.x : 0;
+      const vy = prev ? p.y - prev.y : 0;
+      next.set(p.id, {
+        id: `remote_${p.id}`,
+        type: EntityType.REMOTE_PLAYER,
+        playerId: p.id,
+        characterId: p.characterId,
+        x: p.x,
+        y: p.y,
+        w: p.w,
+        h: p.h,
+        velocity: { x: vx, y: vy },
+        knockbackVelocity: { x: 0, y: 0 },
+        color: '#ffffff',
+        markedForDeletion: false,
+        visualZ: 0
+      });
+    });
+    this.remotePlayers = next;
   }
 
   spawnEnemiesForRoom(room: Room) {
@@ -536,6 +575,26 @@ export class GameEngine {
           markedForDeletion: false,
           timer: 3,
           ownerId: 'player'
+      };
+      this.entities.push(bomb);
+  }
+
+  spawnRemoteBombFx(x: number, y: number) {
+      const size = 20;
+      const bomb: BombEntity = {
+          id: uuid(),
+          type: EntityType.BOMB,
+          x: x - size / 2,
+          y: y - size / 2,
+          w: size,
+          h: size,
+          velocity: {x:0, y:0},
+          knockbackVelocity: { x: 0, y: 0 },
+          color: '#111827',
+          markedForDeletion: false,
+          timer: 0.05,
+          ownerId: 'remote',
+          fxOnly: true
       };
       this.entities.push(bomb);
   }
@@ -857,7 +916,11 @@ export class GameEngine {
             const bomb = e as BombEntity;
             bomb.timer -= dt;
             if (bomb.timer <= 0) {
-                this.explodeBomb(bomb);
+                if (bomb.fxOnly) {
+                    bomb.markedForDeletion = true;
+                } else {
+                    this.explodeBomb(bomb);
+                }
             }
         } else if (e.type === EntityType.ITEM) {
             if (checkAABB(this.player, e)) {

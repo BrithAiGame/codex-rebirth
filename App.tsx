@@ -194,6 +194,7 @@ const GameLoop: React.FC<{ engine: GameEngine, input: React.MutableRefObject<Inp
                         const restart = input.current.isRestartPressed();
                         const pause = input.current.isPausePressed();
                         const bomb = input.current.isBombPressed();
+                        latestInputRef.current = { move, shoot, bomb, pause, restart };
                         engine.update({ move, shoot, restart, pause, bomb }, frameInterval / 1000);
                     }
                 }
@@ -242,6 +243,7 @@ export default function App() {
   const joystickShootRef = useRef<Vector2>({ x: 0, y: 0 });
   const keyListRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const prevRoomPosRef = useRef<{ x: number; y: number } | null>(null);
   
   const uiAssetLoader = useMemo(() => new AssetLoader(), []);
   
@@ -277,6 +279,20 @@ export default function App() {
   const [joinStatus, setJoinStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const [lobbySlots, setLobbySlots] = useState<(number | null)[]>([0, null, null, null]);
   const [localSlot, setLocalSlot] = useState(0);
+  const [onlinePlayers, setOnlinePlayers] = useState<Record<string, { id: string; slot: number; characterId: string; ready: boolean }>>({});
+  const [onlineHostId, setOnlineHostId] = useState<string>('');
+  const [localPlayerId, setLocalPlayerId] = useState<string>('');
+  const [wsStatus, setWsStatus] = useState<'idle' | 'connecting' | 'open' | 'closed' | 'error'>('idle');
+  const wsRef = useRef<WebSocket | null>(null);
+  const seqRef = useRef(1);
+  const roomIdRef = useRef('');
+  const onlinePlayersRef = useRef<Record<string, { id: string; slot: number; characterId: string; ready: boolean }>>({});
+  const localPlayerIdRef = useRef('');
+  const onlineHostIdRef = useRef('');
+  const latestInputRef = useRef<{ move: Vector2; shoot: Vector2 | null; bomb: boolean; pause: boolean; restart: boolean }>({ move: {x:0, y:0}, shoot: null, bomb: false, pause: false, restart: false });
+  const networkTickRef = useRef(0);
+  const lastServerTickRef = useRef(0);
+  const onlineInGameRef = useRef(false);
 
   const [settings, setSettings] = useState<Settings>(() => {
     const isMobile = typeof window !== 'undefined' && (window.innerWidth <= 768 || /Mobi|Android/i.test(navigator.userAgent));
@@ -378,6 +394,11 @@ export default function App() {
     window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
   }, [settings]);
 
+  useEffect(() => { roomIdRef.current = roomId; }, [roomId]);
+  useEffect(() => { onlinePlayersRef.current = onlinePlayers; }, [onlinePlayers]);
+  useEffect(() => { localPlayerIdRef.current = localPlayerId; }, [localPlayerId]);
+  useEffect(() => { onlineHostIdRef.current = onlineHostId; }, [onlineHostId]);
+
   useEffect(() => {
     inputRef.current = new InputManager(settings.keyMap);
     engineRef.current = new GameEngine((stats) => {
@@ -387,7 +408,10 @@ export default function App() {
       }
     });
     engineRef.current.cameraQuaternion = new THREE.Quaternion();
-    return () => { inputRef.current?.destroy(); };
+    return () => { 
+        inputRef.current?.destroy(); 
+        wsRef.current?.close();
+    };
   }, []);
 
   useEffect(() => { if (inputRef.current) inputRef.current.updateKeyMap(settings.keyMap); }, [settings.keyMap]);
@@ -423,6 +447,48 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleRebind);
   }, [waitingForKey]);
 
+  useEffect(() => {
+      if (status === GameStatus.GAME_OVER || status === GameStatus.VICTORY) {
+          onlineInGameRef.current = false;
+      }
+  }, [status]);
+
+  useEffect(() => {
+      if (!onlineInGameRef.current || status !== GameStatus.PLAYING) return;
+      const interval = setInterval(() => {
+          const ws = wsRef.current;
+          if (!ws || ws.readyState !== WebSocket.OPEN) return;
+          const nextTick = Math.max(lastServerTickRef.current + 1, networkTickRef.current + 1);
+          networkTickRef.current = nextTick;
+          ws.send(JSON.stringify({
+              t: 'game.input',
+              roomId: roomIdRef.current,
+              seq: seqRef.current++,
+              clientTime: Date.now(),
+              payload: {
+                  tick: nextTick,
+                  input: latestInputRef.current
+              }
+          }));
+      }, 1000 / 60);
+      return () => clearInterval(interval);
+  }, [roomId, status]);
+
+  useEffect(() => {
+      if (!onlineInGameRef.current || !gameStats?.currentRoomPos) return;
+      if (!prevRoomPosRef.current) {
+          prevRoomPosRef.current = { ...gameStats.currentRoomPos };
+          return;
+      }
+      const dx = gameStats.currentRoomPos.x - prevRoomPosRef.current.x;
+      const dy = gameStats.currentRoomPos.y - prevRoomPosRef.current.y;
+      if (dx !== 0 || dy !== 0) {
+          const dir = dx === 1 ? 'RIGHT' : dx === -1 ? 'LEFT' : dy === 1 ? 'DOWN' : 'UP';
+          sendWs('game.enter_room', { dir });
+          prevRoomPosRef.current = { ...gameStats.currentRoomPos };
+      }
+  }, [gameStats?.currentRoomPos, gameStats?.floor, roomId]);
+
   const startGame = () => {
     if (engineRef.current) {
       engineRef.current.startNewGame(CHARACTERS[selectedCharIndex].id, DIFFICULTY_OPTIONS[difficultyIndex].id);
@@ -430,9 +496,197 @@ export default function App() {
       setShowSettings(false);
     }
   };
+
+  const connectWs = () => {
+      if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
+          return wsRef.current;
+      }
+      const ws = new WebSocket('ws://192.168.31.19:8001');
+      wsRef.current = ws;
+      setWsStatus('connecting');
+
+      ws.onopen = () => setWsStatus('open');
+      ws.onclose = () => setWsStatus('closed');
+      ws.onerror = () => setWsStatus('error');
+      ws.onmessage = (evt) => {
+          let msg: any;
+          try { msg = JSON.parse(evt.data); } catch { return; }
+          const t = msg.t;
+          const payload = msg.payload || {};
+
+          if (t === 'room.created') {
+              const nextRoomId = msg.roomId || payload.roomId;
+              const hostId = payload.hostId || '';
+              setRoomId(nextRoomId || '');
+              setOnlineHostId(hostId);
+              setLocalPlayerId(hostId);
+              setOnlinePlayers({
+                  [hostId]: { id: hostId, slot: 0, characterId: 'alpha', ready: false }
+              });
+              setLobbySlots([0, null, null, null]);
+              setLocalSlot(0);
+              setOnlineView('lobby');
+          }
+
+          if (t === 'room.joined') {
+              const nextRoomId = msg.roomId || payload.roomId;
+              setRoomId(nextRoomId || '');
+              setOnlineHostId(payload.hostId || '');
+              setLocalPlayerId(payload.playerId || '');
+              const list = (payload.players || []) as { id: string; slot: number; characterId: string; ready: boolean }[];
+              const map: Record<string, { id: string; slot: number; characterId: string; ready: boolean }> = {};
+              const slots: (number | null)[] = [null, null, null, null];
+              list.forEach(p => {
+                  map[p.id] = p;
+                  const idx = CHARACTERS.findIndex(c => c.id === p.characterId);
+                  slots[p.slot] = idx >= 0 ? idx : 0;
+              });
+              setOnlinePlayers(map);
+              setLobbySlots(slots);
+              const local = list.find(p => p.id === payload.playerId);
+              if (local) setLocalSlot(local.slot);
+              setOnlineView('lobby');
+              setJoinStatus('idle');
+          }
+
+          if (t === 'room.player_update') {
+              setOnlinePlayers(prev => {
+                  const next = { ...prev };
+                  const playerId = payload.playerId;
+                  if (playerId) {
+                      const current = next[playerId] || { id: playerId, slot: payload.slot ?? 0, characterId: 'alpha', ready: false };
+                      next[playerId] = {
+                          ...current,
+                          ...(payload.slot !== undefined ? { slot: payload.slot } : {}),
+                          ...(payload.characterId ? { characterId: payload.characterId } : {}),
+                          ...(payload.ready !== undefined ? { ready: payload.ready } : {})
+                      };
+                  }
+                  if (payload.hostId) setOnlineHostId(payload.hostId);
+                  const slots: (number | null)[] = [null, null, null, null];
+                  Object.values(next).forEach(p => {
+                      const idx = CHARACTERS.findIndex(c => c.id === p.characterId);
+                      slots[p.slot] = idx >= 0 ? idx : 0;
+                  });
+                  setLobbySlots(slots);
+                  return next;
+              });
+          }
+
+          if (t === 'room.player_left') {
+              setOnlinePlayers(prev => {
+                  const next = { ...prev };
+                  if (payload.playerId) {
+                      delete next[payload.playerId];
+                  }
+                  const slots: (number | null)[] = [null, null, null, null];
+                  Object.values(next).forEach(p => {
+                      const idx = CHARACTERS.findIndex(c => c.id === p.characterId);
+                      slots[p.slot] = idx >= 0 ? idx : 0;
+                  });
+                  setLobbySlots(slots);
+                  return next;
+              });
+          }
+
+          if (t === 'room.error') {
+              setJoinStatus('error');
+          }
+
+          if (t === 'game.start') {
+              const players = payload.players || [];
+              const localId = localPlayerIdRef.current;
+              const local = players.find((p: any) => p.id === localId);
+              const localCharacterId = local?.characterId || 'alpha';
+              const baseSeed = payload.baseSeed || Math.floor(Math.random() * 1000000);
+
+              onlineInGameRef.current = true;
+              prevRoomPosRef.current = null;
+              networkTickRef.current = 0;
+              lastServerTickRef.current = 0;
+
+              if (engineRef.current) {
+                  engineRef.current.startNetworkGame(baseSeed, localCharacterId, payload.difficulty || 'NORMAL');
+              }
+              setStatus(GameStatus.PLAYING);
+
+              const remotePlayers = players
+                  .filter((p: any) => p.id !== localId)
+                  .map((p: any) => ({
+                      id: p.id,
+                      x: 320 + (p.slot || 0) * 40,
+                      y: 240,
+                      w: 32,
+                      h: 32,
+                      characterId: p.characterId || 'alpha'
+                  }));
+              engineRef.current?.syncRemotePlayers(remotePlayers);
+          }
+
+          if (t === 'game.snapshot') {
+              const snap = payload;
+              const tick = snap?.tick ?? 0;
+              lastServerTickRef.current = tick;
+
+              const state = snap?.state;
+              const players = state?.players || [];
+              const remotePlayers = [];
+              const localId = localPlayerIdRef.current;
+              const playerMap = onlinePlayersRef.current;
+              for (const p of players) {
+                  if (p.id === localId) {
+                      if (engineRef.current) {
+                          engineRef.current.player.x = p.x;
+                          engineRef.current.player.y = p.y;
+                          engineRef.current.player.keys = p.keys ?? engineRef.current.player.keys;
+                          engineRef.current.player.bombs = p.bombs ?? engineRef.current.player.bombs;
+                      }
+                  } else {
+                      const playerMeta = playerMap[p.id];
+                      remotePlayers.push({
+                          id: p.id,
+                          x: p.x,
+                          y: p.y,
+                          w: p.w,
+                          h: p.h,
+                          characterId: playerMeta?.characterId || 'alpha'
+                      });
+                  }
+              }
+              engineRef.current?.syncRemotePlayers(remotePlayers);
+          }
+
+          if (t === 'game.bomb') {
+              if (engineRef.current && payload?.x !== undefined && payload?.y !== undefined) {
+                  engineRef.current.spawnRemoteBombFx(payload.x, payload.y);
+              }
+          }
+      };
+      return ws;
+  };
+
+  const sendWs = (t: string, payload?: any) => {
+      const ws = connectWs();
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      const msg = {
+          t,
+          roomId: roomIdRef.current || undefined,
+          seq: seqRef.current++,
+          clientTime: Date.now(),
+          payload
+      };
+      ws.send(JSON.stringify(msg));
+  };
   
   const resumeGame = () => { if (engineRef.current) { engineRef.current.resumeGame(); setStatus(GameStatus.PLAYING); } };
-  const returnToMenu = () => { if (engineRef.current) engineRef.current.status = GameStatus.MENU; setStatus(GameStatus.MENU); setShowSettings(false); };
+  const returnToMenu = () => { 
+      if (engineRef.current) engineRef.current.status = GameStatus.MENU;
+      sendWs('room.leave');
+      onlineInGameRef.current = false;
+      prevRoomPosRef.current = null;
+      setStatus(GameStatus.MENU);
+      setShowSettings(false);
+  };
   const toggleMobilePause = () => {
       if (status === GameStatus.PLAYING) { if (engineRef.current) engineRef.current.status = GameStatus.PAUSED; setStatus(GameStatus.PAUSED); } 
       else if (status === GameStatus.PAUSED) { resumeGame(); }
@@ -524,7 +778,7 @@ export default function App() {
               if (e.code === 'ArrowDown') setMenuSelection(prev => (prev + 1) % 3);
               if (isEnter) { 
                   if (menuSelection === 0) setStatus(GameStatus.CHARACTER_SELECT); 
-                  else if (menuSelection === 1) setStatus(GameStatus.ONLINE);
+                  else if (menuSelection === 1) { setStatus(GameStatus.ONLINE); setOnlineView('menu'); setMenuSelection(0); connectWs(); }
                   else setShowSettings(true); 
               }
            }
@@ -565,15 +819,12 @@ export default function App() {
                    if (e.code === 'ArrowDown') setMenuSelection(prev => (prev + 1) % 3);
                    if (isEnter) {
                        if (menuSelection === 0) {
-                           const newRoom = Math.floor(100000 + Math.random() * 900000).toString();
-                           setRoomId(newRoom);
-                           setLobbySlots([0, null, null, null]);
-                           setLocalSlot(0);
-                           setOnlineView('lobby');
+                           sendWs('room.create', { maxPlayers: 4 });
                        } else if (menuSelection === 1) {
                            setOnlineView('join');
                            setJoinStatus('idle');
                        } else {
+                           sendWs('room.leave');
                            setStatus(GameStatus.MENU);
                        }
                    }
@@ -583,14 +834,18 @@ export default function App() {
                            const next = [...prev];
                            const currentChar = next[localSlot] ?? 0;
                            const dir = e.code === 'ArrowLeft' ? -1 : 1;
-                           next[localSlot] = (currentChar + dir + CHARACTERS.length) % CHARACTERS.length;
+                           const nextIndex = (currentChar + dir + CHARACTERS.length) % CHARACTERS.length;
+                           next[localSlot] = nextIndex;
+                           const characterId = CHARACTERS[nextIndex]?.id || 'alpha';
+                           sendWs('room.select_character', { characterId });
                            return next;
                        });
                    }
-                   if (e.code === 'KeyE') {
-                       startGame();
+                   if (e.code === 'KeyE' && localPlayerId === onlineHostId) {
+                       sendWs('game.start');
                    }
                    if (isEsc) {
+                       sendWs('room.leave');
                        setOnlineView('menu');
                        setMenuSelection(0);
                    }
@@ -627,19 +882,26 @@ export default function App() {
         : 'bg-black/60 text-gray-400 border-gray-700 hover:border-gray-500'
   }`;
 
-  const mockJoinRoom = () => {
+  const joinRoom = () => {
+      const targetId = joinRoomId.trim();
+      if (!targetId) return;
       setJoinStatus('loading');
-      setTimeout(() => {
-          if (joinRoomId.trim() === '123456') {
-              setRoomId(joinRoomId.trim());
-              setLobbySlots([0, 1, null, null]);
-              setLocalSlot(1);
-              setOnlineView('lobby');
-              setJoinStatus('idle');
-          } else {
-              setJoinStatus('error');
-          }
-      }, 900);
+      const ws = connectWs();
+      if (!ws) return;
+      const sendJoin = () => {
+          ws.send(JSON.stringify({
+              t: 'room.join',
+              roomId: targetId,
+              seq: seqRef.current++,
+              clientTime: Date.now(),
+              payload: {}
+          }));
+      };
+      if (ws.readyState === WebSocket.OPEN) {
+          sendJoin();
+      } else {
+          ws.addEventListener('open', sendJoin, { once: true });
+      }
   };
 
   const stats = gameStats?.stats;
@@ -779,7 +1041,7 @@ export default function App() {
                             <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm">
                                 <h1 className="text-6xl md:text-8xl font-black text-transparent bg-clip-text bg-gradient-to-b from-cyan-400 to-blue-900 mb-8 tracking-tighter drop-shadow-2xl">{t('GAME_TITLE')}</h1>
                                 <button className={getBtnClass(0)} onClick={() => setStatus(GameStatus.CHARACTER_SELECT)} onMouseEnter={() => setMenuSelection(0)}>{t('START_RUN')}</button>
-                                <button className={getBtnClass(1)} onClick={() => { setStatus(GameStatus.ONLINE); setOnlineView('menu'); setMenuSelection(0); }} onMouseEnter={() => setMenuSelection(1)}>联机游戏</button>
+                                <button className={getBtnClass(1)} onClick={() => { setStatus(GameStatus.ONLINE); setOnlineView('menu'); setMenuSelection(0); connectWs(); }} onMouseEnter={() => setMenuSelection(1)}>联机游戏</button>
                                 <button className={getBtnClass(2)} onClick={() => setShowSettings(true)} onMouseEnter={() => setMenuSelection(2)}>{t('SETTINGS')}</button>
                             </div>
                         )}
@@ -787,19 +1049,16 @@ export default function App() {
                         {/* ONLINE MENU */}
                         {status === GameStatus.ONLINE && !showSettings && (
                             <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/85 backdrop-blur-sm">
-                                <h2 className="text-5xl md:text-6xl font-black text-white mb-8 tracking-[0.2em] border-b-4 border-white pb-4">联机游戏</h2>
+                                <div className="flex flex-col items-center mb-8">
+                                    <h2 className="text-5xl md:text-6xl font-black text-white tracking-[0.2em] border-b-4 border-white pb-4">联机游戏</h2>
+                                    <div className="mt-2 text-xs font-bold tracking-widest text-gray-500">WS: {wsStatus.toUpperCase()}</div>
+                                </div>
 
                                 {onlineView === 'menu' && (
                                     <div className="flex flex-col items-center">
-                                        <button className={onlineBtnClass(0)} onClick={() => {
-                                            const newRoom = Math.floor(100000 + Math.random() * 900000).toString();
-                                            setRoomId(newRoom);
-                                            setLobbySlots([0, null, null, null]);
-                                            setLocalSlot(0);
-                                            setOnlineView('lobby');
-                                        }} onMouseEnter={() => setMenuSelection(0)}>新建房间</button>
+                                        <button className={onlineBtnClass(0)} onClick={() => sendWs('room.create', { maxPlayers: 4 })} onMouseEnter={() => setMenuSelection(0)}>新建房间</button>
                                         <button className={onlineBtnClass(1)} onClick={() => { setOnlineView('join'); setJoinStatus('idle'); }} onMouseEnter={() => setMenuSelection(1)}>加入房间</button>
-                                        <button className={onlineBtnClass(2)} onClick={() => setStatus(GameStatus.MENU)} onMouseEnter={() => setMenuSelection(2)}>返回</button>
+                                        <button className={onlineBtnClass(2)} onClick={() => { sendWs('room.leave'); setStatus(GameStatus.MENU); }} onMouseEnter={() => setMenuSelection(2)}>返回</button>
                                     </div>
                                 )}
 
@@ -813,7 +1072,7 @@ export default function App() {
                                             placeholder="房间号"
                                         />
                                         <div className="mt-4 flex gap-2">
-                                            <button className="flex-1 px-4 py-2 bg-white text-black font-bold border-2 border-white" onClick={mockJoinRoom} disabled={joinStatus === 'loading'}>
+                                            <button className="flex-1 px-4 py-2 bg-white text-black font-bold border-2 border-white" onClick={joinRoom} disabled={joinStatus === 'loading'}>
                                                 {joinStatus === 'loading' ? '连接中...' : '加入'}
                                             </button>
                                             <button className="flex-1 px-4 py-2 bg-black text-gray-300 font-bold border-2 border-gray-600" onClick={() => setOnlineView('menu')}>返回</button>
@@ -821,7 +1080,7 @@ export default function App() {
                                         {joinStatus === 'error' && (
                                             <div className="mt-3 text-red-400 text-sm font-bold">房间不存在</div>
                                         )}
-                                        <div className="mt-3 text-gray-600 text-xs">Mock: 输入 123456 可加入</div>
+                                        {wsStatus !== 'open' && <div className="mt-3 text-gray-600 text-xs">连接中...</div>}
                                     </div>
                                 )}
 
@@ -856,7 +1115,9 @@ export default function App() {
                                         </div>
                                         <div className="mt-6 flex items-center justify-between">
                                             <div className="text-gray-400 text-sm">房主按下 <span className="text-white font-bold">E</span> 开始游戏</div>
-                                            <button className="px-6 py-2 bg-white text-black font-bold border-2 border-white" onClick={startGame}>开始游戏</button>
+                                            <button className="px-6 py-2 bg-white text-black font-bold border-2 border-white" onClick={() => sendWs('game.start')} disabled={localPlayerId !== onlineHostId}>
+                                                {localPlayerId === onlineHostId ? '开始游戏' : '等待房主'}
+                                            </button>
                                         </div>
                                     </div>
                                 )}
