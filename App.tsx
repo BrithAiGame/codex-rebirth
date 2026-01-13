@@ -4,7 +4,7 @@ import { Canvas, useThree, useFrame } from '@react-three/fiber';
 import { Stats } from '@react-three/drei';
 import { GameEngine } from './game';
 import { InputManager } from './utils';
-import { GameStatus, Settings, Language, KeyMap, Stats as GameStats, Vector2, ItemType } from './types';
+import { GameStatus, Settings, Language, KeyMap, Stats as GameStats, Vector2, ItemType, Direction } from './types';
 import { CONSTANTS, TRANSLATIONS, DEFAULT_KEYMAP } from './constants';
 import { CHARACTERS } from './config/characters';
 import { ITEMS, DROPS } from './config/items';
@@ -146,6 +146,8 @@ const VirtualJoystick: React.FC<JoystickProps> = ({ onMove, color = 'white', lab
 };
 
 // Utils
+type NetInput = { move?: Vector2; shoot?: Vector2 | null; bomb?: boolean; pause?: boolean; restart?: boolean };
+
 const formatKey = (code: string) => {
     if (code.startsWith('Key')) return code.replace('Key', '');
     if (code.startsWith('Arrow')) return code.replace('Arrow', 'ARW-');
@@ -167,10 +169,11 @@ const CameraRig = () => {
 };
 
 // Main Loop
-const GameLoop: React.FC<{ engine: GameEngine, input: React.MutableRefObject<InputManager | null>, joyMove: React.MutableRefObject<Vector2>, joyShoot: React.MutableRefObject<Vector2>, fpsLock: 30 | 60, latestInput: React.MutableRefObject<{ move: Vector2; shoot: Vector2 | null; bomb: boolean; pause: boolean; restart: boolean }> }> = ({ engine, input, joyMove, joyShoot, fpsLock, latestInput }) => {
+const GameLoop: React.FC<{ engine: GameEngine, input: React.MutableRefObject<InputManager | null>, joyMove: React.MutableRefObject<Vector2>, joyShoot: React.MutableRefObject<Vector2>, fpsLock: 30 | 60, latestInput: React.MutableRefObject<{ move: Vector2; shoot: Vector2 | null; bomb: boolean; pause: boolean; restart: boolean }>, isOnline: boolean }> = ({ engine, input, joyMove, joyShoot, fpsLock, latestInput, isOnline }) => {
     const { invalidate } = useThree();
     useEffect(() => {
-        const frameInterval = 1000 / fpsLock;
+        const effectiveFps = isOnline ? 60 : fpsLock;
+        const frameInterval = 1000 / effectiveFps;
         let lastTime = performance.now();
         let accumulator = 0;
         const loop = () => {
@@ -192,7 +195,7 @@ const GameLoop: React.FC<{ engine: GameEngine, input: React.MutableRefObject<Inp
                         };
                         const shoot = (kbShoot && (Math.abs(kbShoot.x) > 0 || Math.abs(kbShoot.y) > 0)) ? kbShoot : (Math.abs(joyShoot.current.x) > 0.2 || Math.abs(joyShoot.current.y) > 0.2) ? joyShoot.current : null;
                         const restart = input.current.isRestartPressed();
-                        const pause = input.current.isPausePressed();
+                        const pause = isOnline ? false : input.current.isPausePressed();
                         const bomb = input.current.isBombPressed();
                         latestInput.current = { move, shoot, bomb, pause, restart };
                         engine.update({ move, shoot, restart, pause, bomb }, frameInterval / 1000);
@@ -302,7 +305,15 @@ export default function App() {
   const remoteFireCooldownRef = useRef<Record<string, number>>({});
   const remoteShootDirRef = useRef<Record<string, Vector2>>({});
   const remoteLastMoveRef = useRef<Record<string, number>>({});
+  const inputBufferRef = useRef<Map<number, Map<string, NetInput>>>(new Map());
+  const lastInputByPlayerRef = useRef<Record<string, NetInput>>({});
+  const replayTickRef = useRef(0);
+  const remoteSimStateRef = useRef<Record<string, { id: string; x: number; y: number; w: number; h: number; characterId: string }>>({});
   const lastSnapshotTickRef = useRef(0);
+  const lastRoomCoordRef = useRef<{ x: number; y: number } | null>(null);
+  const lastRoomDirRef = useRef<Direction | null>(null);
+  const localTickRef = useRef(0);
+  const hashHistoryRef = useRef<Map<number, string>>(new Map());
 
   const [settings, setSettings] = useState<Settings>(() => {
     const isMobile = typeof window !== 'undefined' && (window.innerWidth <= 768 || /Mobi|Android/i.test(navigator.userAgent));
@@ -465,15 +476,18 @@ export default function App() {
 
   useEffect(() => {
       if (!onlineInGameRef.current || status !== GameStatus.PLAYING) return;
+      const tickInterval = setInterval(() => {
+          localTickRef.current += 1;
+      }, 1000 / 60);
       const interval = setInterval(() => {
           const ws = wsRef.current;
           if (!ws || ws.readyState !== WebSocket.OPEN) return;
-          if (!hasSnapshotRef.current) return;
+          if (!onlineInGameRef.current) return;
 
           const now = performance.now();
           const latest = latestInputRef.current;
           const lastSent = lastSentInputRef.current;
-          const heartbeatDue = now - lastInputSendTimeRef.current >= 200;
+          const heartbeatDue = now - lastInputSendTimeRef.current >= 100;
 
           const changed =
               !lastSent ||
@@ -487,16 +501,7 @@ export default function App() {
 
           if (!changed && !heartbeatDue) return;
 
-          const nowMs = performance.now();
-          const elapsed = nowMs - serverTickTimeRef.current;
-          const estimatedTick = Math.max(
-              lastServerTickRef.current,
-              serverTickBaseRef.current + Math.floor(elapsed / (1000 / 60))
-          );
-          let nextTick = Math.max(estimatedTick, lastServerTickRef.current + 1);
-          nextTick = Math.max(nextTick, networkTickRef.current + 1);
-          if (nextTick > estimatedTick + 1) nextTick = estimatedTick + 1;
-          networkTickRef.current = nextTick;
+          const nextTick = Math.max(1, localTickRef.current);
           lastInputSendTimeRef.current = now;
           lastSentInputRef.current = { ...latest };
 
@@ -510,7 +515,84 @@ export default function App() {
                   input: latest
               }
           }));
-      }, 50);
+      }, 16);
+      return () => {
+          clearInterval(interval);
+          clearInterval(tickInterval);
+      };
+  }, [roomId, status]);
+
+  useEffect(() => {
+      if (!onlineInGameRef.current || status !== GameStatus.PLAYING) return;
+      const interval = setInterval(() => {
+          const hash = computeStateHash();
+          if (!hash) return;
+          const tick = localTickRef.current;
+          hashHistoryRef.current.set(tick, hash);
+          if (hashHistoryRef.current.size > 240) {
+              const oldest = Math.min(...hashHistoryRef.current.keys());
+              hashHistoryRef.current.delete(oldest);
+          }
+          sendWs('game.hash', { tick, hash });
+      }, 1000);
+      return () => clearInterval(interval);
+  }, [roomId, status]);
+
+  useEffect(() => {
+      if (!onlineInGameRef.current || status !== GameStatus.PLAYING) return;
+      const interval = setInterval(() => {
+          const targetTick = getEstimatedServerTick();
+          const localId = localPlayerIdRef.current;
+          const playerMap = onlinePlayersRef.current;
+          let steps = 0;
+          while (replayTickRef.current < targetTick && steps < 12) {
+              replayTickRef.current += 1;
+              const tick = replayTickRef.current;
+              const inputMap = inputBufferRef.current.get(tick);
+              Object.values(playerMap).forEach(p => {
+                  if (p.id === localId) return;
+                  const input = inputMap?.get(p.id) ?? lastInputByPlayerRef.current[p.id] ?? {};
+                  lastInputByPlayerRef.current[p.id] = input;
+                  const sim = remoteSimStateRef.current[p.id];
+                  if (!sim) return;
+                  const characterId = p.characterId || 'alpha';
+                  const stats = CHARACTERS.find(c => c.id === characterId)?.baseStats || CHARACTERS[0].baseStats;
+                  const move = normalizeMove(input.move);
+                  sim.x = clamp(sim.x + move.x * stats.speed, 0, CONSTANTS.CANVAS_WIDTH);
+                  sim.y = clamp(sim.y + move.y * stats.speed, 0, CONSTANTS.CANVAS_HEIGHT);
+
+                  const shoot = input.shoot;
+                  const cd = remoteFireCooldownRef.current[p.id] ?? 0;
+                  if (shoot && (Math.abs(shoot.x) > 0 || Math.abs(shoot.y) > 0)) {
+                      const len = Math.hypot(shoot.x, shoot.y) || 1;
+                      const dir = { x: shoot.x / len, y: shoot.y / len };
+                      remoteShootDirRef.current[p.id] = dir;
+                      if (cd <= 0) {
+                          const spawnX = sim.x + sim.w / 2;
+                          const spawnY = sim.y + sim.h / 2;
+                          engineRef.current?.spawnRemoteProjectile(spawnX, spawnY, dir, characterId);
+                          remoteFireCooldownRef.current[p.id] = stats.fireRate;
+                      } else {
+                          remoteFireCooldownRef.current[p.id] = cd - 1;
+                      }
+                  } else {
+                      remoteFireCooldownRef.current[p.id] = Math.max(0, cd - 1);
+                  }
+
+                  if (input.bomb) {
+                      engineRef.current?.spawnRemoteBombFx(sim.x, sim.y);
+                  }
+              });
+
+              if (tick > 2) inputBufferRef.current.delete(tick - 2);
+              steps += 1;
+          }
+
+          const remotes = Object.values(remoteSimStateRef.current).filter(p => p.id !== localId);
+          if (remotes.length) {
+              engineRef.current?.syncRemotePlayers(remotes);
+          }
+      }, 1000 / 60);
       return () => clearInterval(interval);
   }, [roomId, status]);
 
@@ -525,7 +607,7 @@ export default function App() {
       const dy = gameStats.currentRoomPos.y - prevRoomPosRef.current.y;
       if (dx !== 0 || dy !== 0) {
           const dir = dx === 1 ? 'RIGHT' : dx === -1 ? 'LEFT' : dy === 1 ? 'DOWN' : 'UP';
-          sendWs('game.enter_room', { dir });
+          sendWs('game.enter_room', { dir, to: { ...gameStats.currentRoomPos } });
           prevRoomPosRef.current = { ...gameStats.currentRoomPos };
       }
   }, [gameStats?.currentRoomPos, gameStats?.floor, roomId]);
@@ -536,6 +618,118 @@ export default function App() {
       setStatus(GameStatus.PLAYING);
       setShowSettings(false);
     }
+  };
+
+  const getEntrancePosition = (dir: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT', index: number, count: number, w: number, h: number) => {
+      const cx = CONSTANTS.CANVAS_WIDTH / 2;
+      const cy = CONSTANTS.CANVAS_HEIGHT / 2;
+      const offset = CONSTANTS.TILE_SIZE + 16;
+      const doorW = CONSTANTS.TILE_SIZE * 3;
+      const minX = cx - doorW / 2;
+      const maxX = cx + doorW / 2 - w;
+      const minY = cy - doorW / 2;
+      const maxY = cy + doorW / 2 - h;
+      const t = count <= 1 ? 0.5 : index / (count - 1);
+      const spreadX = minX + (maxX - minX) * t;
+      const spreadY = minY + (maxY - minY) * t;
+
+      if (dir === 'UP') return { x: spreadX, y: CONSTANTS.CANVAS_HEIGHT - offset - h };
+      if (dir === 'DOWN') return { x: spreadX, y: offset };
+      if (dir === 'LEFT') return { x: CONSTANTS.CANVAS_WIDTH - offset - w, y: spreadY };
+      return { x: offset, y: spreadY };
+  };
+
+  const normalizeMove = (move?: Vector2) => {
+      if (!move) return { x: 0, y: 0 };
+      const len = Math.hypot(move.x, move.y);
+      if (len <= 1 || len === 0) return move;
+      return { x: move.x / len, y: move.y / len };
+  };
+
+  const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+
+  const getEstimatedServerTick = () => localTickRef.current;
+
+  const hashString = (value: string) => {
+      let hash = 5381;
+      for (let i = 0; i < value.length; i += 1) {
+          hash = (hash * 33) ^ value.charCodeAt(i);
+      }
+      return (hash >>> 0).toString(16);
+  };
+
+  const computeStateHash = () => {
+      if (!engineRef.current) return null;
+      const engine = engineRef.current;
+      const entities = engine.entities
+          .map(e => ({
+              type: e.type,
+              x: Math.round(e.x),
+              y: Math.round(e.y),
+              w: Math.round(e.w),
+              h: Math.round(e.h),
+              hp: (e as any).hp ?? undefined,
+              enemyType: (e as any).enemyType ?? undefined,
+              bossId: (e as any).bossId ?? undefined
+          }))
+          .sort((a, b) => {
+              const ta = `${a.type}-${a.enemyType ?? ''}-${a.bossId ?? ''}-${a.x}-${a.y}-${a.w}-${a.h}-${a.hp ?? 0}`;
+              const tb = `${b.type}-${b.enemyType ?? ''}-${b.bossId ?? ''}-${b.x}-${b.y}-${b.w}-${b.h}-${b.hp ?? 0}`;
+              return ta.localeCompare(tb);
+          });
+      const room = engine.currentRoom;
+      const players = [
+          { id: localPlayerIdRef.current, x: Math.round(engine.player.x), y: Math.round(engine.player.y) },
+          ...Object.values(remoteSimStateRef.current).map(p => ({ id: p.id, x: Math.round(p.x), y: Math.round(p.y) }))
+      ].sort((a, b) => a.id.localeCompare(b.id));
+      const data = JSON.stringify({
+          seed: engine.baseSeed,
+          floor: engine.floorLevel,
+          score: engine.score,
+          room: room ? { x: room.x, y: room.y, type: room.type, cleared: room.cleared } : null,
+          players,
+          entities
+      });
+      return hashString(data);
+  };
+
+  const applyRoomTransition = (dir: Direction, actorId?: string, to?: { x: number; y: number }) => {
+      if (!engineRef.current) return;
+      const isLocalHost = localPlayerIdRef.current === onlineHostIdRef.current;
+      const isLocalActor = actorId && actorId === localPlayerIdRef.current;
+      const current = engineRef.current.currentRoom;
+      if (!current) return;
+      const shouldEnter = !(isLocalHost && isLocalActor);
+      const dx = dir === Direction.RIGHT ? 1 : dir === Direction.LEFT ? -1 : 0;
+      const dy = dir === Direction.DOWN ? 1 : dir === Direction.UP ? -1 : 0;
+      const target = shouldEnter
+          ? engineRef.current.dungeon.find(r => r.x === (to?.x ?? current.x + dx) && r.y === (to?.y ?? current.y + dy))
+          : current;
+      if (!target) return;
+
+      if (shouldEnter) {
+          engineRef.current.enterRoom(target, dir);
+      }
+      lastRoomCoordRef.current = { x: target.x, y: target.y };
+      lastRoomDirRef.current = dir;
+      prevRoomPosRef.current = { x: target.x, y: target.y };
+
+      const playerMap = onlinePlayersRef.current;
+      const ordered = Object.values(playerMap).sort((a, b) => a.slot - b.slot);
+      ordered.forEach((p, index) => {
+          const pos = getEntrancePosition(dir, index, ordered.length, 32, 32);
+          if (p.id === localPlayerIdRef.current) {
+              engineRef.current!.player.x = pos.x;
+              engineRef.current!.player.y = pos.y;
+          } else if (remoteSimStateRef.current[p.id]) {
+              remoteSimStateRef.current[p.id].x = pos.x;
+              remoteSimStateRef.current[p.id].y = pos.y;
+          }
+      });
+      const remotes = Object.values(remoteSimStateRef.current).filter(p => p.id !== localPlayerIdRef.current);
+      if (remotes.length) {
+          engineRef.current.syncRemotePlayers(remotes);
+      }
   };
 
   const connectWs = () => {
@@ -549,6 +743,54 @@ export default function App() {
       ws.onopen = () => setWsStatus('open');
       ws.onclose = () => setWsStatus('closed');
       ws.onerror = () => setWsStatus('error');
+      const applyInputToSim = (playerId: string, input: NetInput) => {
+          const sim = remoteSimStateRef.current[playerId];
+          if (!sim) return;
+          const playerMeta = onlinePlayersRef.current[playerId];
+          const characterId = playerMeta?.characterId || 'alpha';
+          const stats = CHARACTERS.find(c => c.id === characterId)?.baseStats || CHARACTERS[0].baseStats;
+          const move = normalizeMove(input.move);
+          sim.x = clamp(sim.x + move.x * stats.speed, 0, CONSTANTS.CANVAS_WIDTH);
+          sim.y = clamp(sim.y + move.y * stats.speed, 0, CONSTANTS.CANVAS_HEIGHT);
+
+          const shoot = input.shoot;
+          const cd = remoteFireCooldownRef.current[playerId] ?? 0;
+          if (shoot && (Math.abs(shoot.x) > 0 || Math.abs(shoot.y) > 0)) {
+              const len = Math.hypot(shoot.x, shoot.y) || 1;
+              const dir = { x: shoot.x / len, y: shoot.y / len };
+              remoteShootDirRef.current[playerId] = dir;
+              if (cd <= 0) {
+                  const spawnX = sim.x + sim.w / 2;
+                  const spawnY = sim.y + sim.h / 2;
+                  engineRef.current?.spawnRemoteProjectile(spawnX, spawnY, dir, characterId);
+                  remoteFireCooldownRef.current[playerId] = stats.fireRate;
+              } else {
+                  remoteFireCooldownRef.current[playerId] = cd - 1;
+              }
+          } else {
+              remoteFireCooldownRef.current[playerId] = Math.max(0, cd - 1);
+          }
+
+          if (input.bomb) {
+              engineRef.current?.spawnRemoteBombFx(sim.x, sim.y);
+          }
+      };
+      const applyRemoteInput = (playerId: string | undefined, input: any, tick?: number) => {
+          if (!playerId || !input || typeof input !== 'object') return;
+          if (typeof tick !== 'number') return;
+          lastInputByPlayerRef.current[playerId] = input as NetInput;
+          if (tick > localTickRef.current) {
+              localTickRef.current = tick;
+          }
+          if (tick <= replayTickRef.current) {
+              applyInputToSim(playerId, input as NetInput);
+              return;
+          }
+          if (!inputBufferRef.current.has(tick)) {
+              inputBufferRef.current.set(tick, new Map());
+          }
+          inputBufferRef.current.get(tick)?.set(playerId, input as NetInput);
+      };
       ws.onmessage = (evt) => {
           let msg: any;
           try { msg = JSON.parse(evt.data); } catch { return; }
@@ -619,6 +861,11 @@ export default function App() {
                   const next = { ...prev };
                   if (payload.playerId) {
                       delete next[payload.playerId];
+                      delete remoteSimStateRef.current[payload.playerId];
+                      delete lastInputByPlayerRef.current[payload.playerId];
+                      delete remoteFireCooldownRef.current[payload.playerId];
+                      delete remoteShootDirRef.current[payload.playerId];
+                      delete remotePrevPosRef.current[payload.playerId];
                   }
                   const slots: (number | null)[] = [null, null, null, null];
                   Object.values(next).forEach(p => {
@@ -632,6 +879,11 @@ export default function App() {
 
           if (t === 'room.error') {
               setJoinStatus('error');
+          }
+
+          if (t === 'game.input_broadcast' || t === 'game.player_input') {
+              const inputTick = payload.tick ?? msg.tick;
+              applyRemoteInput(payload.playerId, payload.input, inputTick);
           }
 
           if (t === 'game.start') {
@@ -652,7 +904,14 @@ export default function App() {
               remoteFireCooldownRef.current = {};
               remoteShootDirRef.current = {};
               remoteLastMoveRef.current = {};
+              inputBufferRef.current = new Map();
+              lastInputByPlayerRef.current = {};
+              replayTickRef.current = 0;
+              remoteSimStateRef.current = {};
               lastSnapshotTickRef.current = 0;
+              lastRoomCoordRef.current = null;
+              lastRoomDirRef.current = null;
+              localTickRef.current = 0;
 
               if (engineRef.current) {
                   engineRef.current.startNetworkGame(baseSeed, localCharacterId, payload.difficulty || 'NORMAL');
@@ -669,103 +928,32 @@ export default function App() {
                       h: 32,
                       characterId: p.characterId || 'alpha'
                   }));
+              remoteSimStateRef.current = {};
+              remotePlayers.forEach(p => {
+                  remoteSimStateRef.current[p.id] = { ...p };
+              });
               engineRef.current?.syncRemotePlayers(remotePlayers);
           }
 
           if (t === 'game.snapshot') {
-              const snap = payload;
-              const tick = snap?.tick ?? 0;
-              if (tick < lastServerTickRef.current) return;
-              lastServerTickRef.current = tick;
-              serverTickBaseRef.current = tick;
-              serverTickTimeRef.current = performance.now();
-              if (networkTickRef.current < tick) {
-                  networkTickRef.current = tick;
-              }
-              hasSnapshotRef.current = true;
-              const tickDelta = Math.max(1, tick - lastSnapshotTickRef.current);
-              lastSnapshotTickRef.current = tick;
+              return;
+          }
 
-              const state = snap?.state;
-              const players = state?.players || [];
-              const roomInfo = state?.room;
-              if (roomInfo && engineRef.current) {
-                  const current = engineRef.current.currentRoom;
-                  if (!current || current.x !== roomInfo.x || current.y !== roomInfo.y) {
-                      const target = engineRef.current.dungeon.find(r => r.x === roomInfo.x && r.y === roomInfo.y);
-                      if (target) {
-                          target.cleared = !!roomInfo.cleared;
-                          target.forcedOpen = !!roomInfo.forcedOpen;
-                          if (roomInfo.doors) target.doors = { ...target.doors, ...roomInfo.doors };
-                          engineRef.current.enterRoom(target, null);
-                          prevRoomPosRef.current = { x: roomInfo.x, y: roomInfo.y };
-                      }
+          if (t === 'game.enter_room') {
+              if (payload?.dir) {
+                  applyRoomTransition(payload.dir as Direction, payload.playerId, payload.to);
+              }
+          }
+
+          if (t === 'game.hash') {
+              const tick = payload?.tick;
+              const hash = payload?.hash;
+              if (typeof tick === 'number' && typeof hash === 'string') {
+                  const localHash = hashHistoryRef.current.get(tick);
+                  if (localHash && localHash !== hash) {
+                      console.warn('Hash mismatch', { tick, localHash, remoteHash: hash, playerId: payload?.playerId });
                   }
               }
-              const remotePlayers = [];
-              const localId = localPlayerIdRef.current;
-              const playerMap = onlinePlayersRef.current;
-              for (const p of players) {
-                  if (p.id === localId) {
-                      if (engineRef.current) {
-                          const dx = p.x - engineRef.current.player.x;
-                          const dy = p.y - engineRef.current.player.y;
-                          const dist = Math.hypot(dx, dy);
-                          if (dist > 35) {
-                              engineRef.current.player.x = p.x;
-                              engineRef.current.player.y = p.y;
-                          } else if (dist > 3) {
-                              engineRef.current.player.x += dx * 0.15;
-                              engineRef.current.player.y += dy * 0.15;
-                          } else {
-                              // Ignore tiny jitter to avoid rubber-banding
-                          }
-                          engineRef.current.player.keys = p.keys ?? engineRef.current.player.keys;
-                          engineRef.current.player.bombs = p.bombs ?? engineRef.current.player.bombs;
-                      }
-                  } else {
-                      const playerMeta = playerMap[p.id];
-                      const now = performance.now();
-                      const prev = remotePrevPosRef.current[p.id];
-                      const dx = prev ? p.x - prev.x : 0;
-                      const dy = prev ? p.y - prev.y : 0;
-                      if (Math.hypot(dx, dy) > 0.5) {
-                          const len = Math.hypot(dx, dy) || 1;
-                          remoteShootDirRef.current[p.id] = { x: dx / len, y: dy / len };
-                          remoteLastMoveRef.current[p.id] = now;
-                      }
-
-                      const characterId = playerMeta?.characterId || 'alpha';
-                      const stats = CHARACTERS.find(c => c.id === characterId)?.baseStats || CHARACTERS[0].baseStats;
-                      const cd = remoteFireCooldownRef.current[p.id] ?? 0;
-                      const movedRecently = (now - (remoteLastMoveRef.current[p.id] || 0)) < 600;
-                      const dir = remoteShootDirRef.current[p.id];
-                      if (dir && movedRecently) {
-                          const nextCd = cd - tickDelta;
-                          if (nextCd <= 0) {
-                              const spawnX = p.x + p.w / 2;
-                              const spawnY = p.y + p.h / 2;
-                              engineRef.current?.spawnRemoteProjectile(spawnX, spawnY, dir, characterId);
-                              remoteFireCooldownRef.current[p.id] = stats.fireRate;
-                          } else {
-                              remoteFireCooldownRef.current[p.id] = nextCd;
-                          }
-                      } else {
-                          remoteFireCooldownRef.current[p.id] = Math.max(0, cd - tickDelta);
-                      }
-
-                      remotePrevPosRef.current[p.id] = { x: p.x, y: p.y };
-                      remotePlayers.push({
-                          id: p.id,
-                          x: p.x,
-                          y: p.y,
-                          w: p.w,
-                          h: p.h,
-                          characterId
-                      });
-                  }
-              }
-              engineRef.current?.syncRemotePlayers(remotePlayers);
           }
 
           if (t === 'game.bomb') {
@@ -803,11 +991,19 @@ export default function App() {
       remoteFireCooldownRef.current = {};
       remoteShootDirRef.current = {};
       remoteLastMoveRef.current = {};
+      inputBufferRef.current = new Map();
+      lastInputByPlayerRef.current = {};
+      replayTickRef.current = 0;
+      remoteSimStateRef.current = {};
       lastSnapshotTickRef.current = 0;
+      lastRoomCoordRef.current = null;
+      lastRoomDirRef.current = null;
+      localTickRef.current = 0;
       setStatus(GameStatus.MENU);
       setShowSettings(false);
   };
   const toggleMobilePause = () => {
+      if (onlineInGameRef.current) return;
       if (status === GameStatus.PLAYING) { if (engineRef.current) engineRef.current.status = GameStatus.PAUSED; setStatus(GameStatus.PAUSED); } 
       else if (status === GameStatus.PAUSED) { resumeGame(); }
   };
@@ -1122,7 +1318,7 @@ export default function App() {
                             {settings.showFPS && <Stats className="fps-stats" />}
                             {engineRef.current && (
                                 <>
-                                <GameLoop engine={engineRef.current} input={inputRef} joyMove={joystickMoveRef} joyShoot={joystickShootRef} fpsLock={settings.fpsLock} latestInput={latestInputRef} />
+                                <GameLoop engine={engineRef.current} input={inputRef} joyMove={joystickMoveRef} joyShoot={joystickShootRef} fpsLock={settings.fpsLock} latestInput={latestInputRef} isOnline={onlineInGameRef.current} />
                                     <GameScene engine={engineRef.current} />
                                 </>
                             )}

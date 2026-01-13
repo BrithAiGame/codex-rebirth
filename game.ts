@@ -320,6 +320,13 @@ export class GameEngine {
     this.remotePlayers.forEach((player, id) => {
       const target = this.remoteTargets.get(id);
       if (!target) return;
+      if (this.onlineMode) {
+        player.x = target.x;
+        player.y = target.y;
+        player.velocity.x = 0;
+        player.velocity.y = 0;
+        return;
+      }
       const dx = target.x - player.x;
       const dy = target.y - player.y;
       const dist = Math.hypot(dx, dy);
@@ -1119,33 +1126,41 @@ export class GameEngine {
               p.markedForDeletion = true;
               const hitDir = normalizeVector(p.velocity);
               this.damagePlayer(1, 10, hitDir); 
+              return;
+          }
+          for (const remote of this.remotePlayers.values()) {
+              if (checkAABB(p, remote)) {
+                  p.markedForDeletion = true;
+                  return;
+              }
           }
       }
   }
 
   updateEnemy(e: EnemyEntity) {
       e.timer++;
-      const distToPlayer = distance(e, this.player);
+      const target = this.getTargetPlayer(e);
+      const distToPlayer = distance(e, target);
       const speed = e.stats.speed;
 
       if (e.enemyType === EnemyType.BOSS) {
-          this.updateBoss(e, distToPlayer);
+          this.updateBoss(e, distToPlayer, target);
           return;
       }
 
-      if (this.updateSpecialEnemy(e, distToPlayer)) {
+      if (this.updateSpecialEnemy(e, distToPlayer, target)) {
           return;
       }
 
       if (e.enemyType === EnemyType.CHASER) {
           if (e.timer % 5 === 0) {
-            const dir = normalizeVector({ x: this.player.x - e.x, y: this.player.y - e.y });
+            const dir = normalizeVector({ x: target.x - e.x, y: target.y - e.y });
             e.velocity = { x: dir.x * speed, y: dir.y * speed };
           }
       } 
       else if (e.enemyType === EnemyType.TANK) {
           if (e.timer % 10 === 0) {
-             const dir = normalizeVector({ x: this.player.x - e.x, y: this.player.y - e.y });
+             const dir = normalizeVector({ x: target.x - e.x, y: target.y - e.y });
              e.velocity = { x: dir.x * speed, y: dir.y * speed };
           }
       }
@@ -1153,8 +1168,8 @@ export class GameEngine {
           if (!e.orbitAngle) e.orbitAngle = 0;
           e.orbitAngle += 0.02 * (speed / 0.1);
           const orbitDist = 150;
-          const targetX = this.player.x + Math.cos(e.orbitAngle) * orbitDist;
-          const targetY = this.player.y + Math.sin(e.orbitAngle) * orbitDist;
+          const targetX = target.x + Math.cos(e.orbitAngle) * orbitDist;
+          const targetY = target.y + Math.sin(e.orbitAngle) * orbitDist;
           const dx = targetX - e.x;
           const dy = targetY - e.y;
           e.velocity = { x: dx * 0.05 * (speed / 0.1), y: dy * 0.05 * (speed / 0.1) };
@@ -1162,7 +1177,7 @@ export class GameEngine {
       else if (e.enemyType === EnemyType.SHOOTER) {
           e.velocity = { x: 0, y: 0 };
           if (e.timer % e.stats.fireRate === 0 && distToPlayer < e.stats.range) {
-              const dir = normalizeVector({ x: this.player.x - e.x, y: this.player.y - e.y });
+              const dir = normalizeVector({ x: target.x - e.x, y: target.y - e.y });
               this.spawnProjectile(e, dir);
           }
       } else if (e.enemyType === EnemyType.DASHER) {
@@ -1172,17 +1187,17 @@ export class GameEngine {
               if (e.timer > waitTime) {
                   e.aiState = 'ATTACK';
                   e.timer = 0;
-                  const dir = normalizeVector({ x: this.player.x - e.x, y: this.player.y - e.y });
+                  const dir = normalizeVector({ x: target.x - e.x, y: target.y - e.y });
                   e.velocity = { x: dir.x * speed * 4, y: dir.y * speed * 4 }; 
               }
           }
       }
   }
 
-  updateSpecialEnemy(e: EnemyEntity, distToPlayer: number): boolean {
+  updateSpecialEnemy(e: EnemyEntity, distToPlayer: number, target: { x: number; y: number; w: number; h: number }): boolean {
       const id = e.enemyId;
       if (!id) return false;
-      const toPlayer = normalizeVector({ x: this.player.x - e.x, y: this.player.y - e.y });
+      const toPlayer = normalizeVector({ x: target.x - e.x, y: target.y - e.y });
       const speed = e.stats.speed;
 
       if (id === 'mantis') {
@@ -1203,8 +1218,8 @@ export class GameEngine {
           if (!e.orbitAngle) e.orbitAngle = 0;
           e.orbitAngle += 0.03;
           const orbitDist = 140;
-          const targetX = this.player.x + Math.cos(e.orbitAngle) * orbitDist;
-          const targetY = this.player.y + Math.sin(e.orbitAngle) * orbitDist;
+          const targetX = target.x + Math.cos(e.orbitAngle) * orbitDist;
+          const targetY = target.y + Math.sin(e.orbitAngle) * orbitDist;
           const dir = normalizeVector({ x: targetX - e.x, y: targetY - e.y });
           e.velocity = { x: dir.x * speed, y: dir.y * speed };
           if (e.timer % e.stats.fireRate === 0) {
@@ -1240,8 +1255,8 @@ export class GameEngine {
           if (!e.orbitAngle) e.orbitAngle = 0;
           e.orbitAngle += 0.04;
           const orbitDist = 120;
-          const targetX = this.player.x + Math.cos(e.orbitAngle) * orbitDist;
-          const targetY = this.player.y + Math.sin(e.orbitAngle) * orbitDist;
+          const targetX = target.x + Math.cos(e.orbitAngle) * orbitDist;
+          const targetY = target.y + Math.sin(e.orbitAngle) * orbitDist;
           const dir = normalizeVector({ x: targetX - e.x, y: targetY - e.y });
           e.velocity = { x: dir.x * speed, y: dir.y * speed };
           if (e.timer % e.stats.fireRate === 0) {
@@ -1323,8 +1338,8 @@ export class GameEngine {
           if (!e.orbitAngle) e.orbitAngle = 0;
           e.orbitAngle += 0.025;
           const orbitDist = 170;
-          const targetX = this.player.x + Math.cos(e.orbitAngle) * orbitDist;
-          const targetY = this.player.y + Math.sin(e.orbitAngle) * orbitDist;
+          const targetX = target.x + Math.cos(e.orbitAngle) * orbitDist;
+          const targetY = target.y + Math.sin(e.orbitAngle) * orbitDist;
           const dir = normalizeVector({ x: targetX - e.x, y: targetY - e.y });
           e.velocity = { x: dir.x * speed, y: dir.y * speed };
           if (e.timer % e.stats.fireRate === 0) {
@@ -1402,8 +1417,8 @@ export class GameEngine {
           if (!e.orbitAngle) e.orbitAngle = 0;
           e.orbitAngle += 0.05;
           const orbitDist = 140;
-          const targetX = this.player.x + Math.cos(e.orbitAngle) * orbitDist;
-          const targetY = this.player.y + Math.sin(e.orbitAngle) * orbitDist;
+          const targetX = target.x + Math.cos(e.orbitAngle) * orbitDist;
+          const targetY = target.y + Math.sin(e.orbitAngle) * orbitDist;
           const dir = normalizeVector({ x: targetX - e.x, y: targetY - e.y });
           e.velocity = { x: dir.x * speed, y: dir.y * speed };
           if (e.timer % e.stats.fireRate === 0) {
@@ -1459,9 +1474,28 @@ export class GameEngine {
       }
   }
 
-  updateBoss(e: EnemyEntity, distToPlayer: number) {
+  getTargetPlayer(e: EnemyEntity) {
+      const candidates: { x: number; y: number; w: number; h: number }[] = [
+          { x: this.player.x, y: this.player.y, w: this.player.w, h: this.player.h }
+      ];
+      this.remotePlayers.forEach(p => {
+          candidates.push({ x: p.x, y: p.y, w: p.w, h: p.h });
+      });
+      let best = candidates[0];
+      let bestDist = distance(e, best);
+      for (let i = 1; i < candidates.length; i += 1) {
+          const d = distance(e, candidates[i]);
+          if (d < bestDist) {
+              bestDist = d;
+              best = candidates[i];
+          }
+      }
+      return best;
+  }
+
+  updateBoss(e: EnemyEntity, distToPlayer: number, target: { x: number; y: number; w: number; h: number }) {
       const bossId = e.bossId || 'boss_skull';
-      const toPlayer = normalizeVector({ x: this.player.x - e.x, y: this.player.y - e.y });
+      const toPlayer = normalizeVector({ x: target.x - e.x, y: target.y - e.y });
       const speed = e.stats.speed;
 
       if (bossId === 'boss_skull') {
@@ -1477,8 +1511,8 @@ export class GameEngine {
       if (bossId === 'boss_wyrm') {
           e.bossSpin = (e.bossSpin || 0) + 0.03;
           const orbitDist = 160;
-          const targetX = this.player.x + Math.cos(e.bossSpin) * orbitDist;
-          const targetY = this.player.y + Math.sin(e.bossSpin) * orbitDist;
+          const targetX = target.x + Math.cos(e.bossSpin) * orbitDist;
+          const targetY = target.y + Math.sin(e.bossSpin) * orbitDist;
           const dir = normalizeVector({ x: targetX - e.x, y: targetY - e.y });
           e.velocity = { x: dir.x * speed, y: dir.y * speed };
           if (e.timer % e.stats.fireRate === 0) {
