@@ -471,6 +471,22 @@ function handleMessage(ws: WebSocket, raw: string) {
       });
       break;
     }
+    case "game.revive": {
+      const room = ensureRoom(msg.roomId, ws, ack);
+      if (!room) return;
+      const session = sessions.get(ws);
+      if (!session) return;
+      if (session.playerId !== room.hostId) {
+        error(ws, "NOT_HOST", "Only host can revive.", ack);
+        return;
+      }
+      broadcast(room, {
+        t: "game.revive",
+        roomId: room.id,
+        payload: msg.payload
+      });
+      break;
+    }
     case "game.hash": {
       const room = ensureRoom(msg.roomId, ws, ack);
       if (!room) return;

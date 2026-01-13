@@ -171,7 +171,7 @@ const CameraRig = () => {
 };
 
 // Main Loop
-const GameLoop: React.FC<{ engine: GameEngine, input: React.MutableRefObject<InputManager | null>, joyMove: React.MutableRefObject<Vector2>, joyShoot: React.MutableRefObject<Vector2>, fpsLock: 30 | 60, latestInput: React.MutableRefObject<LocalInput>, isOnline: boolean, isHost: boolean, onHostRestart: () => void }> = ({ engine, input, joyMove, joyShoot, fpsLock, latestInput, isOnline, isHost, onHostRestart }) => {
+const GameLoop: React.FC<{ engine: GameEngine, input: React.MutableRefObject<InputManager | null>, joyMove: React.MutableRefObject<Vector2>, joyShoot: React.MutableRefObject<Vector2>, fpsLock: 30 | 60, latestInput: React.MutableRefObject<LocalInput>, isOnline: boolean, isHost: boolean, onHostRestart: () => void, localDeadRef: React.MutableRefObject<boolean> }> = ({ engine, input, joyMove, joyShoot, fpsLock, latestInput, isOnline, isHost, onHostRestart, localDeadRef }) => {
     const { invalidate } = useThree();
     const restartHoldRef = useRef(0);
     useEffect(() => {
@@ -192,15 +192,19 @@ const GameLoop: React.FC<{ engine: GameEngine, input: React.MutableRefObject<Inp
                     if (engine.status === GameStatus.PLAYING) {
                         const kbMove = input.current.getMovementVector();
                         const kbShoot = input.current.getShootingDirection();
-                        const move = {
+                        const rawMove = {
                             x: (Math.abs(kbMove.x) > 0 ? kbMove.x : joyMove.current.x),
                             y: (Math.abs(kbMove.y) > 0 ? kbMove.y : joyMove.current.y)
                         };
-                        const shoot = (kbShoot && (Math.abs(kbShoot.x) > 0 || Math.abs(kbShoot.y) > 0)) ? kbShoot : (Math.abs(joyShoot.current.x) > 0.2 || Math.abs(joyShoot.current.y) > 0.2) ? joyShoot.current : null;
+                        const rawShoot = (kbShoot && (Math.abs(kbShoot.x) > 0 || Math.abs(kbShoot.y) > 0)) ? kbShoot : (Math.abs(joyShoot.current.x) > 0.2 || Math.abs(joyShoot.current.y) > 0.2) ? joyShoot.current : null;
                         const restartPressed = input.current.isRestartPressed();
                         const pause = isOnline ? false : input.current.isPausePressed();
                         const bomb = input.current.isBombPressed();
                         const restart = !isOnline ? restartPressed : false;
+                        const isSpectating = isOnline && localDeadRef.current;
+                        const move = isSpectating ? { x: 0, y: 0 } : rawMove;
+                        const shoot = isSpectating ? null : rawShoot;
+                        const bombSafe = isSpectating ? false : bomb;
                         const shotMeta = shoot ? {
                             damage: engine.player.stats.damage,
                             fireRate: engine.player.stats.fireRate,
@@ -213,8 +217,8 @@ const GameLoop: React.FC<{ engine: GameEngine, input: React.MutableRefObject<Inp
                         const shotMetaKey = shotMeta
                             ? `${shotMeta.damage}|${shotMeta.fireRate}|${shotMeta.shotSpeed}|${shotMeta.range}|${shotMeta.knockback}|${shotMeta.shotSpread}|${shotMeta.bulletScale}`
                             : '';
-                        latestInput.current = { move, shoot, bomb, pause, restart, shotMeta, shotMetaKey };
-                        engine.update({ move, shoot, restart, pause, bomb }, frameInterval / 1000);
+                        latestInput.current = { move, shoot, bomb: bombSafe, pause, restart, shotMeta, shotMetaKey };
+                        engine.update({ move, shoot, restart, pause, bomb: bombSafe }, frameInterval / 1000);
 
                         if (isOnline && isHost) {
                             if (restartPressed) {
@@ -314,6 +318,7 @@ export default function App() {
   const [localPlayerId, setLocalPlayerId] = useState<string>('');
   const [wsStatus, setWsStatus] = useState<'idle' | 'connecting' | 'open' | 'closed' | 'error'>('idle');
   const [isOnlineSession, setIsOnlineSession] = useState(false);
+  const [deadListVersion, setDeadListVersion] = useState(0);
   const wsRef = useRef<WebSocket | null>(null);
   const seqRef = useRef(1);
   const roomIdRef = useRef('');
@@ -346,6 +351,7 @@ export default function App() {
   const deadPlayersRef = useRef<Set<string>>(new Set());
   const localDeadRef = useRef(false);
   const deathMarkersRef = useRef<Set<string>>(new Set());
+  const bossReviveSentRef = useRef<string | null>(null);
 
   const [settings, setSettings] = useState<Settings>(() => {
     const isMobile = typeof window !== 'undefined' && (window.innerWidth <= 768 || /Mobi|Android/i.test(navigator.userAgent));
@@ -515,11 +521,31 @@ export default function App() {
           const x = engineRef.current.player.x + engineRef.current.player.w / 2;
           const y = engineRef.current.player.y + engineRef.current.player.h / 2;
           localDeadRef.current = true;
+          if (engineRef.current) engineRef.current.deadLocal = true;
           deadPlayersRef.current.add(playerId);
           addDeathMarker(playerId, x, y, label);
           sendWs('game.player_dead', { playerId, x, y, label });
+          setDeadListVersion(v => v + 1);
       }
   }, [status, isOnlineSession]);
+
+  useEffect(() => {
+      if (!isOnlineSession || status !== GameStatus.PLAYING) return;
+      if (localDeadRef.current) return;
+      if (!gameStats || gameStats.hp > 0) return;
+      const playerId = localPlayerIdRef.current;
+      const label = `PLAYER ${(onlinePlayersRef.current[playerId]?.slot ?? 0) + 1}`;
+      if (engineRef.current) {
+          const x = engineRef.current.player.x + engineRef.current.player.w / 2;
+          const y = engineRef.current.player.y + engineRef.current.player.h / 2;
+          localDeadRef.current = true;
+          engineRef.current.deadLocal = true;
+          deadPlayersRef.current.add(playerId);
+          addDeathMarker(playerId, x, y, label);
+          sendWs('game.player_dead', { playerId, x, y, label });
+          setDeadListVersion(v => v + 1);
+      }
+  }, [status, isOnlineSession, gameStats?.hp]);
 
   useEffect(() => {
       if (!onlineInGameRef.current || status !== GameStatus.PLAYING) return;
@@ -578,6 +604,11 @@ export default function App() {
           clearInterval(tickInterval);
       };
   }, [roomId, status]);
+
+  useEffect(() => {
+      if (!engineRef.current) return;
+      engineRef.current.onlineIsHost = localPlayerIdRef.current === onlineHostIdRef.current;
+  }, [isOnlineSession, onlineHostId, localPlayerId]);
 
   useEffect(() => {
       if (!isOnlineSession) return;
@@ -712,6 +743,23 @@ export default function App() {
       }
   }, [gameStats?.currentRoomPos, gameStats?.floor, roomId]);
 
+  useEffect(() => {
+      if (!isOnlineSession) return;
+      if (localPlayerIdRef.current !== onlineHostIdRef.current) return;
+      const engine = engineRef.current;
+      if (!engine || !engine.currentRoom) return;
+      if (engine.currentRoom.type !== 'BOSS') return;
+      if (!engine.currentRoom.cleared) return;
+      if (deadPlayersRef.current.size === 0) return;
+      const roomKey = `${engine.floorLevel}:${engine.currentRoom.x},${engine.currentRoom.y}`;
+      if (bossReviveSentRef.current === roomKey) return;
+      bossReviveSentRef.current = roomKey;
+      const reviveX = CONSTANTS.TILE_SIZE + 12;
+      const reviveY = CONSTANTS.CANVAS_HEIGHT - CONSTANTS.TILE_SIZE - engine.player.h - 12;
+      const playerIds = Array.from(deadPlayersRef.current);
+      sendWs('game.revive', { playerIds, x: reviveX, y: reviveY });
+  }, [gameStats?.currentRoomPos, gameStats?.floor, isOnlineSession, deadListVersion]);
+
   const startGame = () => {
     if (engineRef.current) {
       setIsOnlineSession(false);
@@ -777,6 +825,16 @@ export default function App() {
           markedForDeletion: false,
           label
       } as any);
+      setDeadListVersion(v => v + 1);
+  };
+
+  const removeDeathMarker = (playerId: string) => {
+      if (!engineRef.current) return;
+      const markerId = `skull_${playerId}`;
+      if (!deathMarkersRef.current.has(markerId)) return;
+      deathMarkersRef.current.delete(markerId);
+      engineRef.current.entities = engineRef.current.entities.filter(e => e.id !== markerId);
+      setDeadListVersion(v => v + 1);
   };
 
   const buildStateSync = () => {
@@ -850,6 +908,12 @@ export default function App() {
 
       if (Array.isArray(state.deadPlayers)) {
           deadPlayersRef.current = new Set(state.deadPlayers);
+          const localId = localPlayerIdRef.current;
+          const isDead = deadPlayersRef.current.has(localId);
+          localDeadRef.current = isDead;
+          if (engineRef.current) engineRef.current.deadLocal = isDead;
+          deathMarkersRef.current = new Set(state.deadPlayers.map((id: string) => `skull_${id}`));
+          setDeadListVersion(v => v + 1);
       }
 
       if (Array.isArray(state.players)) {
@@ -1148,12 +1212,15 @@ export default function App() {
               lastRoomCoordRef.current = null;
               lastRoomDirRef.current = null;
               localTickRef.current = 0;
-              deadPlayersRef.current = new Set();
-              localDeadRef.current = false;
-              deathMarkersRef.current = new Set();
+                  deadPlayersRef.current = new Set();
+                  localDeadRef.current = false;
+                  deathMarkersRef.current = new Set();
+                  bossReviveSentRef.current = null;
 
               if (engineRef.current) {
                   engineRef.current.startNetworkGame(baseSeed, localCharacterId, payload.difficulty || 'NORMAL');
+                  engineRef.current.onlineIsHost = localPlayerIdRef.current === onlineHostIdRef.current;
+                  engineRef.current.deadLocal = false;
               }
               setStatus(GameStatus.PLAYING);
 
@@ -1181,8 +1248,12 @@ export default function App() {
               if (typeof seed === 'number' && engineRef.current) {
                   engineRef.current.startNetworkGame(seed, characterId, 'NORMAL');
                   localDeadRef.current = false;
+                  engineRef.current.deadLocal = false;
                   deadPlayersRef.current = new Set();
                   deathMarkersRef.current = new Set();
+                  bossReviveSentRef.current = null;
+                  engineRef.current.onlineIsHost = localPlayerIdRef.current === onlineHostIdRef.current;
+                  setDeadListVersion(v => v + 1);
               }
           }
 
@@ -1220,6 +1291,10 @@ export default function App() {
               const y = typeof payload?.y === 'number' ? payload.y : undefined;
               const label = typeof payload?.label === 'string' ? payload.label : `PLAYER ${payload?.slot ?? ''}`.trim();
               deadPlayersRef.current.add(playerId);
+              if (playerId === localPlayerIdRef.current) {
+                  localDeadRef.current = true;
+                  if (engineRef.current) engineRef.current.deadLocal = true;
+              }
               if (remoteSimStateRef.current[playerId]) {
                   delete remoteSimStateRef.current[playerId];
                   engineRef.current?.syncRemotePlayers(Object.values(remoteSimStateRef.current));
@@ -1227,6 +1302,32 @@ export default function App() {
               if (x !== undefined && y !== undefined) {
                   addDeathMarker(playerId, x, y, label);
               }
+              setDeadListVersion(v => v + 1);
+          }
+
+          if (t === 'game.revive') {
+              const ids: string[] = payload?.playerIds || [];
+              const x = payload?.x;
+              const y = payload?.y;
+              if (!Array.isArray(ids) || typeof x !== 'number' || typeof y !== 'number') return;
+              const localId = localPlayerIdRef.current;
+              ids.forEach(pid => {
+                  deadPlayersRef.current.delete(pid);
+                  removeDeathMarker(pid);
+                  if (pid === localId && engineRef.current) {
+                      localDeadRef.current = false;
+                      engineRef.current.deadLocal = false;
+                      engineRef.current.status = GameStatus.PLAYING;
+                      engineRef.current.player.stats.hp = engineRef.current.player.stats.maxHp;
+                      engineRef.current.player.x = x;
+                      engineRef.current.player.y = y;
+                  } else if (remoteSimStateRef.current[pid]) {
+                      remoteSimStateRef.current[pid].x = x;
+                      remoteSimStateRef.current[pid].y = y;
+                  }
+              });
+              engineRef.current?.syncRemotePlayers(Object.values(remoteSimStateRef.current));
+              setDeadListVersion(v => v + 1);
           }
 
           if (t === 'game.bomb') {
@@ -1293,6 +1394,7 @@ export default function App() {
       const newSeed = Math.floor(Math.random() * 1_000_000);
       if (engineRef.current) {
           engineRef.current.startNetworkGame(newSeed, characterId, 'NORMAL');
+          engineRef.current.deadLocal = false;
       }
       sendWs('game.restart', { seed: newSeed });
   };
@@ -1520,8 +1622,14 @@ export default function App() {
   const shakeRatio = Math.min(1, shakeTimer / 16);
   const shakePhase = shakeTimer * 0.9;
   const shakeX = Math.sin(shakePhase * 7.3) * 10 * shakeRatio;
-  const shakeY = Math.cos(shakePhase * 9.1) * 8 * shakeRatio;
-  const flashOpacity = Math.min(1, flashTimer / 12);
+      const shakeY = Math.cos(shakePhase * 9.1) * 8 * shakeRatio;
+      const flashOpacity = Math.min(1, flashTimer / 12);
+      const deadList = isOnlineSession
+          ? Array.from(deadPlayersRef.current).map(id => {
+              const slot = onlinePlayersRef.current[id]?.slot;
+              return { id, label: `PLAYER ${(slot ?? 0) + 1}` };
+          })
+          : [];
 
   return (
     <div className="flex flex-col h-screen w-screen bg-[#050505] text-white select-none overflow-hidden" style={{ fontFamily: "'GameFontZh', monospace" }}>
@@ -1581,6 +1689,21 @@ export default function App() {
                           <AttributePill icon="💣" value={`${gameStats?.bombs ?? 0}`} title="Bombs" />
                       </div>
                   )}
+                  {isOnlineSession && deadList.length > 0 && (
+                      <div className="absolute right-2 md:right-4 top-2 z-40 bg-black/70 border border-gray-700 px-3 py-2 rounded text-xs md:text-sm">
+                          <div className="text-gray-300 font-bold tracking-widest mb-1">DEAD</div>
+                          <div className="flex flex-col gap-1">
+                              {deadList.map(item => (
+                                  <div key={item.id} className="text-gray-400">{item.label}</div>
+                              ))}
+                          </div>
+                      </div>
+                  )}
+                  {isOnlineSession && localDeadRef.current && (
+                      <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none">
+                          <div className="bg-black/70 border border-gray-700 px-6 py-3 text-2xl font-black tracking-widest text-gray-200">SPECTATING</div>
+                      </div>
+                  )}
                   <div 
                     className="relative shadow-2xl overflow-hidden bg-black border-4 border-neutral-800" 
                     style={{ width: displayDims.width, height: displayDims.height, transform: `translate(${shakeX}px, ${shakeY}px)` }}
@@ -1609,7 +1732,7 @@ export default function App() {
                             {settings.showFPS && <Stats className="fps-stats" />}
                             {engineRef.current && (
                                 <>
-                                <GameLoop engine={engineRef.current} input={inputRef} joyMove={joystickMoveRef} joyShoot={joystickShootRef} fpsLock={settings.fpsLock} latestInput={latestInputRef} isOnline={isOnlineSession} isHost={localPlayerIdRef.current === onlineHostIdRef.current} onHostRestart={handleHostRestart} />
+                                <GameLoop engine={engineRef.current} input={inputRef} joyMove={joystickMoveRef} joyShoot={joystickShootRef} fpsLock={settings.fpsLock} latestInput={latestInputRef} isOnline={isOnlineSession} isHost={localPlayerIdRef.current === onlineHostIdRef.current} onHostRestart={handleHostRestart} localDeadRef={localDeadRef} />
                                     <GameScene engine={engineRef.current} />
                                 </>
                             )}

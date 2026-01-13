@@ -55,6 +55,8 @@ export class GameEngine {
   floorThemeLabel: string | null = null;
   difficulty: 'NORMAL' | 'HARD' = 'NORMAL';
   onlineMode: boolean = false;
+  onlineIsHost: boolean = false;
+  deadLocal: boolean = false;
 
   // Callback to sync React UI
   onUiUpdate: (stats: any) => void;
@@ -810,8 +812,13 @@ export class GameEngine {
 
   update(input: { move: {x:number, y:number}, shoot: {x:number, y:number} | null, restart?: boolean, pause?: boolean, bomb?: boolean }, dt: number = 1 / 60) {
     
+    let effectiveInput = input;
+    if (this.onlineMode && this.deadLocal) {
+        effectiveInput = { move: { x: 0, y: 0 }, shoot: null, restart: false, pause: false, bomb: false };
+    }
+
     // Toggle Pause Logic
-    if (input.pause) {
+    if (effectiveInput.pause) {
         if (!this.pauseLocked) {
             if (this.status === GameStatus.PLAYING) {
                 this.status = GameStatus.PAUSED;
@@ -824,7 +831,7 @@ export class GameEngine {
         this.pauseLocked = false;
     }
 
-    if (input.restart) {
+    if (effectiveInput.restart) {
         this.restartTimer++;
         if (this.restartTimer > 60) {
             this.startNewGame(this.characterId);
@@ -864,9 +871,9 @@ export class GameEngine {
     }
 
     // --- Player Logic ---
-    if (input.move.x !== 0 || input.move.y !== 0) {
-        this.player.velocity.x = input.move.x * this.player.stats.speed;
-        this.player.velocity.y = input.move.y * this.player.stats.speed;
+    if (effectiveInput.move.x !== 0 || effectiveInput.move.y !== 0) {
+        this.player.velocity.x = effectiveInput.move.x * this.player.stats.speed;
+        this.player.velocity.y = effectiveInput.move.y * this.player.stats.speed;
     } else {
         this.player.velocity.x = 0;
         this.player.velocity.y = 0;
@@ -876,12 +883,12 @@ export class GameEngine {
     this.resolveWallCollision(this.player);
 
     if (this.player.cooldown > 0) this.player.cooldown--;
-    if (input.shoot && this.player.cooldown <= 0) {
-        this.spawnProjectile(this.player, input.shoot);
+    if (effectiveInput.shoot && this.player.cooldown <= 0) {
+        this.spawnProjectile(this.player, effectiveInput.shoot);
         this.player.cooldown = this.player.stats.fireRate;
     }
 
-    if (input.bomb) {
+    if (effectiveInput.bomb) {
         if (!this.bombLocked && this.player.bombs > 0) {
             this.player.bombs = Math.max(0, this.player.bombs - 1);
             const cx = this.player.x + this.player.w / 2;
@@ -1494,12 +1501,16 @@ export class GameEngine {
   }
 
   getTargetPlayer(e: EnemyEntity) {
-      const candidates: { x: number; y: number; w: number; h: number }[] = [
-          { x: this.player.x, y: this.player.y, w: this.player.w, h: this.player.h }
-      ];
+      const candidates: { x: number; y: number; w: number; h: number }[] = [];
+      if (!this.deadLocal) {
+          candidates.push({ x: this.player.x, y: this.player.y, w: this.player.w, h: this.player.h });
+      }
       this.remotePlayers.forEach(p => {
           candidates.push({ x: p.x, y: p.y, w: p.w, h: p.h });
       });
+      if (candidates.length === 0) {
+          return { x: this.player.x, y: this.player.y, w: this.player.w, h: this.player.h };
+      }
       let best = candidates[0];
       let bestDist = distance(e, best);
       for (let i = 1; i < candidates.length; i += 1) {
@@ -1681,6 +1692,7 @@ export class GameEngine {
   }
 
   checkDoorCollisions() {
+      if (this.onlineMode && !this.onlineIsHost) return;
       if (!this.currentRoom || this.currentRoom.doorAnim?.state !== 'open') return;
       const ts = CONSTANTS.TILE_SIZE;
       const cx = this.player.x + this.player.w / 2;
@@ -1819,6 +1831,12 @@ export class GameEngine {
       this.player.knockbackVelocity.y += hitDir.y * knockback * 4;
       
       if (this.player.stats.hp <= 0) {
+          if (this.onlineMode) {
+              this.player.stats.hp = 0;
+              this.deadLocal = true;
+              this.status = GameStatus.PLAYING;
+              return;
+          }
           this.status = GameStatus.GAME_OVER;
       }
   }
