@@ -146,7 +146,9 @@ const VirtualJoystick: React.FC<JoystickProps> = ({ onMove, color = 'white', lab
 };
 
 // Utils
-type NetInput = { move?: Vector2; shoot?: Vector2 | null; bomb?: boolean; pause?: boolean; restart?: boolean };
+type ShotMeta = Pick<GameStats, 'damage' | 'fireRate' | 'shotSpeed' | 'range' | 'knockback' | 'shotSpread' | 'bulletScale'>;
+type NetInput = { move: Vector2; shoot: Vector2 | null; bomb: boolean; pause: boolean; restart: boolean; shotMeta?: ShotMeta };
+type LocalInput = NetInput & { shotMetaKey: string };
 
 const formatKey = (code: string) => {
     if (code.startsWith('Key')) return code.replace('Key', '');
@@ -169,7 +171,7 @@ const CameraRig = () => {
 };
 
 // Main Loop
-const GameLoop: React.FC<{ engine: GameEngine, input: React.MutableRefObject<InputManager | null>, joyMove: React.MutableRefObject<Vector2>, joyShoot: React.MutableRefObject<Vector2>, fpsLock: 30 | 60, latestInput: React.MutableRefObject<{ move: Vector2; shoot: Vector2 | null; bomb: boolean; pause: boolean; restart: boolean }>, isOnline: boolean }> = ({ engine, input, joyMove, joyShoot, fpsLock, latestInput, isOnline }) => {
+const GameLoop: React.FC<{ engine: GameEngine, input: React.MutableRefObject<InputManager | null>, joyMove: React.MutableRefObject<Vector2>, joyShoot: React.MutableRefObject<Vector2>, fpsLock: 30 | 60, latestInput: React.MutableRefObject<LocalInput>, isOnline: boolean }> = ({ engine, input, joyMove, joyShoot, fpsLock, latestInput, isOnline }) => {
     const { invalidate } = useThree();
     useEffect(() => {
         const effectiveFps = isOnline ? 60 : fpsLock;
@@ -197,7 +199,19 @@ const GameLoop: React.FC<{ engine: GameEngine, input: React.MutableRefObject<Inp
                         const restart = input.current.isRestartPressed();
                         const pause = isOnline ? false : input.current.isPausePressed();
                         const bomb = input.current.isBombPressed();
-                        latestInput.current = { move, shoot, bomb, pause, restart };
+                        const shotMeta = shoot ? {
+                            damage: engine.player.stats.damage,
+                            fireRate: engine.player.stats.fireRate,
+                            shotSpeed: engine.player.stats.shotSpeed,
+                            range: engine.player.stats.range,
+                            knockback: engine.player.stats.knockback,
+                            shotSpread: engine.player.stats.shotSpread,
+                            bulletScale: engine.player.stats.bulletScale
+                        } : undefined;
+                        const shotMetaKey = shotMeta
+                            ? `${shotMeta.damage}|${shotMeta.fireRate}|${shotMeta.shotSpeed}|${shotMeta.range}|${shotMeta.knockback}|${shotMeta.shotSpread}|${shotMeta.bulletScale}`
+                            : '';
+                        latestInput.current = { move, shoot, bomb, pause, restart, shotMeta, shotMetaKey };
                         engine.update({ move, shoot, restart, pause, bomb }, frameInterval / 1000);
                     }
                 }
@@ -293,8 +307,8 @@ export default function App() {
   const onlinePlayersRef = useRef<Record<string, { id: string; slot: number; characterId: string; ready: boolean }>>({});
   const localPlayerIdRef = useRef('');
   const onlineHostIdRef = useRef('');
-  const latestInputRef = useRef<{ move: Vector2; shoot: Vector2 | null; bomb: boolean; pause: boolean; restart: boolean }>({ move: {x:0, y:0}, shoot: null, bomb: false, pause: false, restart: false });
-  const lastSentInputRef = useRef<{ move: Vector2; shoot: Vector2 | null; bomb: boolean; pause: boolean; restart: boolean } | null>(null);
+  const latestInputRef = useRef<LocalInput>({ move: {x:0, y:0}, shoot: null, bomb: false, pause: false, restart: false, shotMeta: undefined, shotMetaKey: '' });
+  const lastSentInputRef = useRef<LocalInput | null>(null);
   const lastInputSendTimeRef = useRef(0);
   const networkTickRef = useRef(0);
   const lastServerTickRef = useRef(0);
@@ -499,7 +513,8 @@ export default function App() {
               (lastSent.shoot?.y ?? 0) !== (latest.shoot?.y ?? 0) ||
               lastSent.bomb !== latest.bomb ||
               lastSent.pause !== latest.pause ||
-              lastSent.restart !== latest.restart;
+              lastSent.restart !== latest.restart ||
+              lastSent.shotMetaKey !== latest.shotMetaKey;
 
           if (!changed && !heartbeatDue) return;
 
@@ -507,6 +522,14 @@ export default function App() {
           lastInputSendTimeRef.current = now;
           lastSentInputRef.current = { ...latest };
 
+          const outgoing: NetInput = {
+              move: latest.move,
+              shoot: latest.shoot,
+              bomb: latest.bomb,
+              pause: latest.pause,
+              restart: latest.restart,
+              shotMeta: latest.shotMeta
+          };
           ws.send(JSON.stringify({
               t: 'game.input',
               roomId: roomIdRef.current,
@@ -514,7 +537,7 @@ export default function App() {
               clientTime: Date.now(),
               payload: {
                   tick: nextTick,
-                  input: latest
+                  input: outgoing
               }
           }));
       }, 16);
@@ -569,10 +592,19 @@ export default function App() {
                   const sim = remoteSimStateRef.current[p.id];
                   if (!sim) return;
                   const characterId = p.characterId || 'alpha';
-                  const stats = CHARACTERS.find(c => c.id === characterId)?.baseStats || CHARACTERS[0].baseStats;
+                  const baseStats = CHARACTERS.find(c => c.id === characterId)?.baseStats || CHARACTERS[0].baseStats;
+                  const stats = input.shotMeta ?? {
+                      damage: baseStats.damage,
+                      fireRate: baseStats.fireRate,
+                      shotSpeed: baseStats.shotSpeed,
+                      range: baseStats.range,
+                      knockback: baseStats.knockback,
+                      shotSpread: baseStats.shotSpread,
+                      bulletScale: baseStats.bulletScale
+                  };
                   const move = normalizeMove(input.move);
-                  sim.x = clamp(sim.x + move.x * stats.speed, 0, CONSTANTS.CANVAS_WIDTH);
-                  sim.y = clamp(sim.y + move.y * stats.speed, 0, CONSTANTS.CANVAS_HEIGHT);
+                  sim.x = clamp(sim.x + move.x * baseStats.speed, 0, CONSTANTS.CANVAS_WIDTH);
+                  sim.y = clamp(sim.y + move.y * baseStats.speed, 0, CONSTANTS.CANVAS_HEIGHT);
 
                   const shoot = input.shoot;
                   const cd = remoteFireCooldownRef.current[p.id] ?? 0;
@@ -583,7 +615,7 @@ export default function App() {
                       if (cd <= 0) {
                           const spawnX = sim.x + sim.w / 2;
                           const spawnY = sim.y + sim.h / 2;
-                          engineRef.current?.spawnRemoteProjectile(spawnX, spawnY, dir, characterId);
+                          engineRef.current?.spawnRemoteProjectile(spawnX, spawnY, dir, stats);
                           remoteFireCooldownRef.current[p.id] = stats.fireRate;
                       } else {
                           remoteFireCooldownRef.current[p.id] = cd - 1;
@@ -858,31 +890,40 @@ export default function App() {
       ws.onopen = () => setWsStatus('open');
       ws.onclose = () => setWsStatus('closed');
       ws.onerror = () => setWsStatus('error');
-      const applyInputToSim = (playerId: string, input: NetInput) => {
-          const sim = remoteSimStateRef.current[playerId];
-          if (!sim) return;
-          const playerMeta = onlinePlayersRef.current[playerId];
-          const characterId = playerMeta?.characterId || 'alpha';
-          const stats = CHARACTERS.find(c => c.id === characterId)?.baseStats || CHARACTERS[0].baseStats;
-          const move = normalizeMove(input.move);
-          sim.x = clamp(sim.x + move.x * stats.speed, 0, CONSTANTS.CANVAS_WIDTH);
-          sim.y = clamp(sim.y + move.y * stats.speed, 0, CONSTANTS.CANVAS_HEIGHT);
+          const applyInputToSim = (playerId: string, input: NetInput) => {
+              const sim = remoteSimStateRef.current[playerId];
+              if (!sim) return;
+              const playerMeta = onlinePlayersRef.current[playerId];
+              const characterId = playerMeta?.characterId || 'alpha';
+              const baseStats = CHARACTERS.find(c => c.id === characterId)?.baseStats || CHARACTERS[0].baseStats;
+              const stats = input.shotMeta ?? {
+                  damage: baseStats.damage,
+                  fireRate: baseStats.fireRate,
+                  shotSpeed: baseStats.shotSpeed,
+                  range: baseStats.range,
+                  knockback: baseStats.knockback,
+                  shotSpread: baseStats.shotSpread,
+                  bulletScale: baseStats.bulletScale
+              };
+              const move = normalizeMove(input.move);
+              sim.x = clamp(sim.x + move.x * baseStats.speed, 0, CONSTANTS.CANVAS_WIDTH);
+              sim.y = clamp(sim.y + move.y * baseStats.speed, 0, CONSTANTS.CANVAS_HEIGHT);
 
-          const shoot = input.shoot;
-          const cd = remoteFireCooldownRef.current[playerId] ?? 0;
-          if (shoot && (Math.abs(shoot.x) > 0 || Math.abs(shoot.y) > 0)) {
-              const len = Math.hypot(shoot.x, shoot.y) || 1;
-              const dir = { x: shoot.x / len, y: shoot.y / len };
-              remoteShootDirRef.current[playerId] = dir;
-              if (cd <= 0) {
-                  const spawnX = sim.x + sim.w / 2;
-                  const spawnY = sim.y + sim.h / 2;
-                  engineRef.current?.spawnRemoteProjectile(spawnX, spawnY, dir, characterId);
-                  remoteFireCooldownRef.current[playerId] = stats.fireRate;
+              const shoot = input.shoot;
+              const cd = remoteFireCooldownRef.current[playerId] ?? 0;
+              if (shoot && (Math.abs(shoot.x) > 0 || Math.abs(shoot.y) > 0)) {
+                  const len = Math.hypot(shoot.x, shoot.y) || 1;
+                  const dir = { x: shoot.x / len, y: shoot.y / len };
+                  remoteShootDirRef.current[playerId] = dir;
+                  if (cd <= 0) {
+                      const spawnX = sim.x + sim.w / 2;
+                      const spawnY = sim.y + sim.h / 2;
+                      engineRef.current?.spawnRemoteProjectile(spawnX, spawnY, dir, stats);
+                      remoteFireCooldownRef.current[playerId] = stats.fireRate;
+                  } else {
+                      remoteFireCooldownRef.current[playerId] = cd - 1;
+                  }
               } else {
-                  remoteFireCooldownRef.current[playerId] = cd - 1;
-              }
-          } else {
               remoteFireCooldownRef.current[playerId] = Math.max(0, cd - 1);
           }
 

@@ -1066,9 +1066,7 @@ export class GameEngine {
       }
   }
 
-  spawnRemoteProjectile(x: number, y: number, dir: Vector2, characterId: string) {
-      const char = CHARACTERS.find(c => c.id === characterId) || CHARACTERS[0];
-      const stats = char.baseStats;
+  spawnRemoteProjectile(x: number, y: number, dir: Vector2, stats: Pick<Stats, 'damage' | 'fireRate' | 'shotSpeed' | 'range' | 'knockback' | 'shotSpread' | 'bulletScale'>) {
       const speed = stats.shotSpeed;
       const damage = stats.damage;
       const knockback = stats.knockback;
@@ -1078,24 +1076,45 @@ export class GameEngine {
       baseSize *= stats.bulletScale;
       const range = stats.range;
 
-      this.entities.push({
-          id: uuid(),
-          type: EntityType.PROJECTILE,
-          x: x - baseSize / 2,
-          y: y - baseSize / 2,
-          w: baseSize,
-          h: baseSize,
-          velocity: { x: dir.x * speed, y: dir.y * speed },
-          knockbackVelocity: { x: 0, y: 0 },
-          color: CONSTANTS.COLORS.PROJECTILE_FRIENDLY,
-          markedForDeletion: false,
-          ownerId: 'remote',
-          damage,
-          knockback,
-          lifeTime: range,
-          visualZ: 10,
-          fxOnly: true
-      } as ProjectileEntity);
+      const pushProj = (dx: number, dy: number) => {
+          this.entities.push({
+              id: uuid(),
+              type: EntityType.PROJECTILE,
+              x: x - baseSize / 2,
+              y: y - baseSize / 2,
+              w: baseSize,
+              h: baseSize,
+              velocity: { x: dx * speed, y: dy * speed },
+              knockbackVelocity: { x: 0, y: 0 },
+              color: CONSTANTS.COLORS.PROJECTILE_FRIENDLY,
+              markedForDeletion: false,
+              ownerId: 'player',
+              damage,
+              knockback,
+              lifeTime: range,
+              visualZ: 10,
+              fxOnly: true
+          } as ProjectileEntity);
+      };
+
+      const spread = stats.shotSpread ?? 1;
+      if (spread === 1) {
+          pushProj(dir.x, dir.y);
+          return;
+      }
+      const angle = Math.atan2(dir.y, dir.x);
+      const spreadRad = 15 * (Math.PI / 180);
+      if (spread === 3) {
+          const angles = [angle - spreadRad, angle, angle + spreadRad];
+          angles.forEach(a => pushProj(Math.cos(a), Math.sin(a)));
+          return;
+      }
+      if (spread === 4) {
+          const angles = [angle - spreadRad * 1.5, angle - spreadRad * 0.5, angle + spreadRad * 0.5, angle + spreadRad * 1.5];
+          angles.forEach(a => pushProj(Math.cos(a), Math.sin(a)));
+          return;
+      }
+      pushProj(dir.x, dir.y);
   }
 
   updateProjectile(p: ProjectileEntity) {
