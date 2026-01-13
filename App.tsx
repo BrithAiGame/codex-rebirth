@@ -167,7 +167,7 @@ const CameraRig = () => {
 };
 
 // Main Loop
-const GameLoop: React.FC<{ engine: GameEngine, input: React.MutableRefObject<InputManager | null>, joyMove: React.MutableRefObject<Vector2>, joyShoot: React.MutableRefObject<Vector2>, fpsLock: 30 | 60 }> = ({ engine, input, joyMove, joyShoot, fpsLock }) => {
+const GameLoop: React.FC<{ engine: GameEngine, input: React.MutableRefObject<InputManager | null>, joyMove: React.MutableRefObject<Vector2>, joyShoot: React.MutableRefObject<Vector2>, fpsLock: 30 | 60, latestInput: React.MutableRefObject<{ move: Vector2; shoot: Vector2 | null; bomb: boolean; pause: boolean; restart: boolean }> }> = ({ engine, input, joyMove, joyShoot, fpsLock, latestInput }) => {
     const { invalidate } = useThree();
     useEffect(() => {
         const frameInterval = 1000 / fpsLock;
@@ -194,7 +194,7 @@ const GameLoop: React.FC<{ engine: GameEngine, input: React.MutableRefObject<Inp
                         const restart = input.current.isRestartPressed();
                         const pause = input.current.isPausePressed();
                         const bomb = input.current.isBombPressed();
-                        latestInputRef.current = { move, shoot, bomb, pause, restart };
+                        latestInput.current = { move, shoot, bomb, pause, restart };
                         engine.update({ move, shoot, restart, pause, bomb }, frameInterval / 1000);
                     }
                 }
@@ -293,6 +293,7 @@ export default function App() {
   const networkTickRef = useRef(0);
   const lastServerTickRef = useRef(0);
   const onlineInGameRef = useRef(false);
+  const hasSnapshotRef = useRef(false);
 
   const [settings, setSettings] = useState<Settings>(() => {
     const isMobile = typeof window !== 'undefined' && (window.innerWidth <= 768 || /Mobi|Android/i.test(navigator.userAgent));
@@ -458,6 +459,7 @@ export default function App() {
       const interval = setInterval(() => {
           const ws = wsRef.current;
           if (!ws || ws.readyState !== WebSocket.OPEN) return;
+          if (!hasSnapshotRef.current) return;
           const nextTick = Math.max(lastServerTickRef.current + 1, networkTickRef.current + 1);
           networkTickRef.current = nextTick;
           ws.send(JSON.stringify({
@@ -604,6 +606,7 @@ export default function App() {
               prevRoomPosRef.current = null;
               networkTickRef.current = 0;
               lastServerTickRef.current = 0;
+              hasSnapshotRef.current = false;
 
               if (engineRef.current) {
                   engineRef.current.startNetworkGame(baseSeed, localCharacterId, payload.difficulty || 'NORMAL');
@@ -627,6 +630,10 @@ export default function App() {
               const snap = payload;
               const tick = snap?.tick ?? 0;
               lastServerTickRef.current = tick;
+              if (networkTickRef.current < tick) {
+                  networkTickRef.current = tick;
+              }
+              hasSnapshotRef.current = true;
 
               const state = snap?.state;
               const players = state?.players || [];
@@ -684,6 +691,7 @@ export default function App() {
       sendWs('room.leave');
       onlineInGameRef.current = false;
       prevRoomPosRef.current = null;
+      hasSnapshotRef.current = false;
       setStatus(GameStatus.MENU);
       setShowSettings(false);
   };
@@ -1002,7 +1010,7 @@ export default function App() {
                             {settings.showFPS && <Stats className="fps-stats" />}
                             {engineRef.current && (
                                 <>
-                                <GameLoop engine={engineRef.current} input={inputRef} joyMove={joystickMoveRef} joyShoot={joystickShootRef} fpsLock={settings.fpsLock} />
+                                <GameLoop engine={engineRef.current} input={inputRef} joyMove={joystickMoveRef} joyShoot={joystickShootRef} fpsLock={settings.fpsLock} latestInput={latestInputRef} />
                                     <GameScene engine={engineRef.current} />
                                 </>
                             )}
