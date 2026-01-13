@@ -57,9 +57,11 @@ export class GameEngine {
   onlineMode: boolean = false;
   onlineIsHost: boolean = false;
   deadLocal: boolean = false;
+  onlineRng: SeededRNG | null = null;
 
   // Callback to sync React UI
   onUiUpdate: (stats: any) => void;
+  onItemCollected?: (item: ItemEntity, room: Room | null) => void;
 
   // Camera State
   cameraQuaternion: THREE.Quaternion = new THREE.Quaternion();
@@ -76,6 +78,7 @@ export class GameEngine {
     this.characterId = characterId;
     this.difficulty = difficulty;
     this.onlineMode = false;
+    this.onlineRng = null;
     this.floorLevel = 1;
     this.score = 0;
     this.baseSeed = Math.floor(Math.random() * 1000000); // Initial random seed for the run
@@ -89,6 +92,7 @@ export class GameEngine {
     this.characterId = characterId;
     this.difficulty = difficulty;
     this.onlineMode = true;
+    this.onlineRng = new SeededRNG(baseSeed + 9137);
     this.floorLevel = 1;
     this.score = 0;
     this.baseSeed = baseSeed;
@@ -399,6 +403,7 @@ export class GameEngine {
         const baseFireRate = canShoot ? scaleEnemyShootInterval(config.fireRate) : config.fireRate;
         const fireRate = canShoot ? Math.max(5, Math.round(baseFireRate / diffMult)) : baseFireRate;
 
+        const spawnSeed = this.onlineMode ? Math.floor(rng.next() * 1000000) : undefined;
         const enemy: EnemyEntity = {
             id: uuid(),
             type: EntityType.ENEMY,
@@ -416,6 +421,7 @@ export class GameEngine {
             timer: 0,
             orbitAngle: rng.next() * Math.PI * 2,
             flying: config.flying,
+            ...(spawnSeed !== undefined ? { spawnSeed } : {}),
             stats: {
                 speed: config.speed * diffMult,
                 damage: config.damage * diffMult,
@@ -438,6 +444,7 @@ export class GameEngine {
       const canShoot = config.shotSpeed > 0 || config.range > 0;
       const baseFireRate = canShoot ? scaleEnemyShootInterval(config.fireRate) : config.fireRate;
       const fireRate = canShoot ? Math.max(5, Math.round(baseFireRate / diffMult)) : baseFireRate;
+      const spawnSeed = this.onlineMode ? Math.floor((this.currentRoom?.seed ?? this.baseSeed) + 7777) : undefined;
       const boss: EnemyEntity = {
           id: uuid(),
           type: EntityType.ENEMY,
@@ -456,6 +463,7 @@ export class GameEngine {
           bossId: config.id,
           bossPhase: 0,
           bossSpin: 0,
+          ...(spawnSeed !== undefined ? { spawnSeed } : {}),
           stats: {
               speed: config.speed * diffMult,
               damage: config.damage * diffMult,
@@ -485,7 +493,11 @@ export class GameEngine {
 
   spawnItem(x: number, y: number, seed?: number, choiceGroupId?: string) {
       this.spawnPedestal(x, y);
-      const rng = seed !== undefined ? new SeededRNG(seed) : new SeededRNG(Math.random() * 100000);
+      const baseSeed = this.currentRoom ? this.currentRoom.seed : this.baseSeed;
+      const fallbackSeed = baseSeed + Math.floor(x) * 31 + Math.floor(y) * 17;
+      const rng = seed !== undefined
+          ? new SeededRNG(seed)
+          : new SeededRNG(this.onlineMode ? fallbackSeed : Math.random() * 100000);
       const config = rng.weightedChoice(ITEMS);
       if (!config) return;
 
@@ -510,7 +522,11 @@ export class GameEngine {
   }
 
   spawnDevilItems(x: number, y: number, seed?: number) {
-      const rng = seed !== undefined ? new SeededRNG(seed) : new SeededRNG(Math.random() * 100000);
+      const baseSeed = this.currentRoom ? this.currentRoom.seed : this.baseSeed;
+      const fallbackSeed = baseSeed + Math.floor(x) * 29 + Math.floor(y) * 19;
+      const rng = seed !== undefined
+          ? new SeededRNG(seed)
+          : new SeededRNG(this.onlineMode ? fallbackSeed : Math.random() * 100000);
       const count = 1 + Math.floor(rng.next() * 4);
       const spacing = 70;
       const startX = x - ((count - 1) * spacing) / 2;
@@ -918,7 +934,10 @@ export class GameEngine {
         }
         
         // Spawn rewards
-        if (Math.random() < 0.10) {
+        const clearRoll = this.onlineMode
+            ? new SeededRNG(this.currentRoom.seed + 5051).next()
+            : Math.random();
+        if (clearRoll < 0.10) {
              const cx = CONSTANTS.CANVAS_WIDTH / 2;
              const cy = CONSTANTS.CANVAS_HEIGHT / 2;
              this.spawnPickup(cx, cy);
@@ -975,6 +994,7 @@ export class GameEngine {
             }
         } else if (e.type === EntityType.TRAPDOOR) {
             if (checkAABB(this.player, e)) {
+                if (this.onlineMode && !this.onlineIsHost) return;
                 this.loadFloor(this.floorLevel + 1);
             }
         }
@@ -1742,6 +1762,9 @@ export class GameEngine {
                }
            });
       }
+      if (this.onlineMode && this.onItemCollected) {
+          this.onItemCollected(item, this.currentRoom);
+      }
 
       if (item.itemType === ItemType.KEY) {
           this.player.keys = Math.min(99, this.player.keys + 1);
@@ -1802,18 +1825,23 @@ export class GameEngine {
       if (enemy.hp <= 0) {
           enemy.markedForDeletion = true;
           this.score += 10 + (enemy.enemyType === EnemyType.BOSS ? 500 : 0);
-          
-          if (Math.random() < 0.05) {
+
+          const baseSeed = (enemy.spawnSeed !== undefined ? enemy.spawnSeed : (this.currentRoom?.seed ?? this.baseSeed)) + Math.floor(enemy.x) * 37 + Math.floor(enemy.y) * 13;
+          const dropRng = this.onlineMode ? new SeededRNG(baseSeed) : null;
+          const pickupRoll = this.onlineMode ? dropRng!.next() : Math.random();
+          if (pickupRoll < 0.05) {
               this.spawnPickup(enemy.x + enemy.w/2, enemy.y + enemy.h/2);
           }
 
           const keyDropChance = enemy.enemyType === EnemyType.BOSS ? 0.2 : 0.1;
-          if (Math.random() < keyDropChance) {
+          const keyRoll = this.onlineMode ? dropRng!.next() : Math.random();
+          if (keyRoll < keyDropChance) {
               this.spawnKey(enemy.x + enemy.w/2, enemy.y + enemy.h/2);
           }
 
           const bombDropChance = enemy.enemyType === EnemyType.BOSS ? 0.2 : 0.1;
-          if (Math.random() < bombDropChance) {
+          const bombRoll = this.onlineMode ? dropRng!.next() : Math.random();
+          if (bombRoll < bombDropChance) {
               this.spawnBombPickup(enemy.x + enemy.w/2, enemy.y + enemy.h/2);
           }
       }

@@ -521,6 +521,18 @@ function handleMessage(ws: WebSocket, raw: string) {
       });
       break;
     }
+    case "game.item_picked": {
+      const room = ensureRoom(msg.roomId, ws, ack);
+      if (!room) return;
+      const session = sessions.get(ws);
+      if (!session) return;
+      broadcast(room, {
+        t: "game.item_picked",
+        roomId: room.id,
+        payload: { ...msg.payload, playerId: session.playerId }
+      });
+      break;
+    }
     case "game.enter_room": {
       const room = ensureRoom(msg.roomId, ws, ack);
       if (!room) return;

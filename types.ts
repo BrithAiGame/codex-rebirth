@@ -148,6 +148,7 @@ export interface EnemyEntity extends Entity {
   bossId?: string; // Distinguish boss variants
   bossPhase?: number; // Variant-specific phase/state
   bossSpin?: number; // Variant-specific angle accumulator
+  spawnSeed?: number;
   // Unified stats for enemies (Speed, Damage, etc.)
   stats: {
       speed: number;

@@ -473,6 +473,21 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+      if (!engineRef.current) return;
+      engineRef.current.onItemCollected = (item, room) => {
+          if (!isOnlineSession) return;
+          const roomPos = room ? { x: room.x, y: room.y } : undefined;
+          sendWs('game.item_picked', {
+              x: item.x + item.w / 2,
+              y: item.y + item.h / 2,
+              itemType: item.itemType,
+              choiceGroupId: item.choiceGroupId,
+              room: roomPos
+          });
+      };
+  }, [isOnlineSession]);
+
   useEffect(() => { if (inputRef.current) inputRef.current.updateKeyMap(settings.keyMap); }, [settings.keyMap]);
 
   useEffect(() => {
@@ -843,6 +858,34 @@ export default function App() {
       setDeadListVersion(v => v + 1);
   };
 
+  const applyItemPickup = (payload: any) => {
+      if (!engineRef.current || !payload) return;
+      const x = typeof payload.x === 'number' ? payload.x : null;
+      const y = typeof payload.y === 'number' ? payload.y : null;
+      const itemType = payload.itemType;
+      const choiceGroupId = payload.choiceGroupId;
+      const roomPos = payload.room;
+      const roomRef = roomPos
+          ? engineRef.current.dungeon.find(r => r.x === roomPos.x && r.y === roomPos.y)
+          : engineRef.current.currentRoom;
+      if (roomRef && roomRef.type === 'ITEM') {
+          roomRef.itemCollected = true;
+      }
+      const threshold = CONSTANTS.ITEM_SIZE * 0.75;
+      engineRef.current.entities = engineRef.current.entities.filter(e => {
+          if (e.type !== EntityType.ITEM) return true;
+          const item = e as any;
+          if (choiceGroupId && item.choiceGroupId === choiceGroupId) return false;
+          if (!choiceGroupId && itemType && item.itemType !== itemType) return true;
+          if (x !== null && y !== null) {
+              const dx = (item.x + item.w / 2) - x;
+              const dy = (item.y + item.h / 2) - y;
+              if (Math.hypot(dx, dy) <= threshold) return false;
+          }
+          return true;
+      });
+  };
+
   const buildStateSync = () => {
       if (!engineRef.current) return null;
       const engine = engineRef.current;
@@ -880,6 +923,7 @@ export default function App() {
                         forcedOpen: room.forcedOpen,
                         visited: room.visited,
                         doors: room.doors,
+                        itemCollected: room.itemCollected,
                         doorAnim: room.doorAnim ?? null
                     }
                   : null,
@@ -895,7 +939,11 @@ export default function App() {
       const engine = engineRef.current;
       const state = payload.state;
       if (state.seed !== undefined) engine.baseSeed = state.seed;
-      if (typeof state.floor === 'number') engine.floorLevel = state.floor;
+      if (typeof state.floor === 'number' && state.floor !== engine.floorLevel) {
+          engine.loadFloor(state.floor);
+      } else if (typeof state.floor === 'number') {
+          engine.floorLevel = state.floor;
+      }
       if (typeof state.score === 'number') engine.score = state.score;
 
       if (state.room) {
@@ -904,6 +952,7 @@ export default function App() {
               target.cleared = !!state.room.cleared;
               target.forcedOpen = !!state.room.forcedOpen;
               target.visited = !!state.room.visited;
+              if (state.room.itemCollected !== undefined) target.itemCollected = !!state.room.itemCollected;
               if (state.room.doors) target.doors = { ...target.doors, ...state.room.doors };
               if (state.room.doorAnim) target.doorAnim = state.room.doorAnim;
               engine.currentRoom = target;
@@ -1313,6 +1362,10 @@ export default function App() {
                   addDeathMarker(playerId, x, y, label);
               }
               setDeadListVersion(v => v + 1);
+          }
+
+          if (t === 'game.item_picked') {
+              applyItemPickup(payload);
           }
 
           if (t === 'game.revive') {
