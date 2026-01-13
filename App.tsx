@@ -521,7 +521,11 @@ export default function App() {
           const x = engineRef.current.player.x + engineRef.current.player.w / 2;
           const y = engineRef.current.player.y + engineRef.current.player.h / 2;
           localDeadRef.current = true;
-          if (engineRef.current) engineRef.current.deadLocal = true;
+          if (engineRef.current) {
+              engineRef.current.deadLocal = true;
+              engineRef.current.screenFlashTimer = 0;
+              engineRef.current.cameraShakeTimer = 0;
+          }
           deadPlayersRef.current.add(playerId);
           addDeathMarker(playerId, x, y, label);
           sendWs('game.player_dead', { playerId, x, y, label });
@@ -540,6 +544,8 @@ export default function App() {
           const y = engineRef.current.player.y + engineRef.current.player.h / 2;
           localDeadRef.current = true;
           engineRef.current.deadLocal = true;
+          engineRef.current.screenFlashTimer = 0;
+          engineRef.current.cameraShakeTimer = 0;
           deadPlayersRef.current.add(playerId);
           addDeathMarker(playerId, x, y, label);
           sendWs('game.player_dead', { playerId, x, y, label });
@@ -1293,7 +1299,11 @@ export default function App() {
               deadPlayersRef.current.add(playerId);
               if (playerId === localPlayerIdRef.current) {
                   localDeadRef.current = true;
-                  if (engineRef.current) engineRef.current.deadLocal = true;
+                  if (engineRef.current) {
+                      engineRef.current.deadLocal = true;
+                      engineRef.current.screenFlashTimer = 0;
+                      engineRef.current.cameraShakeTimer = 0;
+                  }
               }
               if (remoteSimStateRef.current[playerId]) {
                   delete remoteSimStateRef.current[playerId];

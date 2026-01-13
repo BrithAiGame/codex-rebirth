@@ -1099,8 +1099,7 @@ export class GameEngine {
               damage,
               knockback,
               lifeTime: range,
-              visualZ: 10,
-              fxOnly: true
+              visualZ: 10
           } as ProjectileEntity);
       };
 
@@ -1692,7 +1691,6 @@ export class GameEngine {
   }
 
   checkDoorCollisions() {
-      if (this.onlineMode && !this.onlineIsHost) return;
       if (!this.currentRoom || this.currentRoom.doorAnim?.state !== 'open') return;
       const ts = CONSTANTS.TILE_SIZE;
       const cx = this.player.x + this.player.w / 2;
@@ -1826,9 +1824,11 @@ export class GameEngine {
       this.player.stats.hp -= damage;
       this.player.invincibleTimer = 60;
       this.player.flashTimer = 10;
-      
-      this.player.knockbackVelocity.x += hitDir.x * knockback * 4;
-      this.player.knockbackVelocity.y += hitDir.y * knockback * 4;
+
+      if (!this.onlineMode) {
+          this.player.knockbackVelocity.x += hitDir.x * knockback * 4;
+          this.player.knockbackVelocity.y += hitDir.y * knockback * 4;
+      }
       
       if (this.player.stats.hp <= 0) {
           if (this.onlineMode) {
