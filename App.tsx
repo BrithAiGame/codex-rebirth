@@ -540,6 +540,17 @@ export default function App() {
 
   useEffect(() => {
       if (!onlineInGameRef.current || status !== GameStatus.PLAYING) return;
+      if (localPlayerIdRef.current !== onlineHostIdRef.current) return;
+      const interval = setInterval(() => {
+          const sync = buildStateSync();
+          if (!sync) return;
+          sendWs('game.state_sync', sync);
+      }, 1000);
+      return () => clearInterval(interval);
+  }, [roomId, status]);
+
+  useEffect(() => {
+      if (!onlineInGameRef.current || status !== GameStatus.PLAYING) return;
       const interval = setInterval(() => {
           const targetTick = getEstimatedServerTick();
           const localId = localPlayerIdRef.current;
@@ -656,6 +667,98 @@ export default function App() {
           hash = (hash * 33) ^ value.charCodeAt(i);
       }
       return (hash >>> 0).toString(16);
+  };
+
+  const buildStateSync = () => {
+      if (!engineRef.current) return null;
+      const engine = engineRef.current;
+      const room = engine.currentRoom;
+      const players = [
+          {
+              id: localPlayerIdRef.current,
+              x: engine.player.x,
+              y: engine.player.y,
+              w: engine.player.w,
+              h: engine.player.h,
+              characterId: engine.characterId
+          },
+          ...Object.values(remoteSimStateRef.current).map(p => ({
+              id: p.id,
+              x: p.x,
+              y: p.y,
+              w: p.w,
+              h: p.h,
+              characterId: p.characterId
+          }))
+      ];
+      return {
+          tick: localTickRef.current,
+          state: {
+              seed: engine.baseSeed,
+              floor: engine.floorLevel,
+              score: engine.score,
+              room: room
+                  ? {
+                        x: room.x,
+                        y: room.y,
+                        type: room.type,
+                        cleared: room.cleared,
+                        forcedOpen: room.forcedOpen,
+                        visited: room.visited,
+                        doors: room.doors,
+                        doorAnim: room.doorAnim ?? null
+                    }
+                  : null,
+              players,
+              entities: engine.entities.map(e => ({ ...e }))
+          }
+      };
+  };
+
+  const applyStateSync = (payload: any) => {
+      if (!engineRef.current || !payload?.state) return;
+      const engine = engineRef.current;
+      const state = payload.state;
+      if (state.seed !== undefined) engine.baseSeed = state.seed;
+      if (typeof state.floor === 'number') engine.floorLevel = state.floor;
+      if (typeof state.score === 'number') engine.score = state.score;
+
+      if (state.room) {
+          const target = engine.dungeon.find(r => r.x === state.room.x && r.y === state.room.y);
+          if (target) {
+              target.cleared = !!state.room.cleared;
+              target.forcedOpen = !!state.room.forcedOpen;
+              target.visited = !!state.room.visited;
+              if (state.room.doors) target.doors = { ...target.doors, ...state.room.doors };
+              if (state.room.doorAnim) target.doorAnim = state.room.doorAnim;
+              engine.currentRoom = target;
+              lastRoomCoordRef.current = { x: target.x, y: target.y };
+              prevRoomPosRef.current = { x: target.x, y: target.y };
+          }
+      }
+
+      if (Array.isArray(state.players)) {
+          const localId = localPlayerIdRef.current;
+          remoteSimStateRef.current = {};
+          const remoteList: { id: string; x: number; y: number; w: number; h: number; characterId: string }[] = [];
+          state.players.forEach((p: any) => {
+              if (!p || !p.id) return;
+              if (p.id === localId) {
+                  engine.player.x = p.x ?? engine.player.x;
+                  engine.player.y = p.y ?? engine.player.y;
+                  engine.player.w = p.w ?? engine.player.w;
+                  engine.player.h = p.h ?? engine.player.h;
+              } else {
+                  remoteSimStateRef.current[p.id] = { ...p };
+                  remoteList.push({ ...p });
+              }
+          });
+          engine.syncRemotePlayers(remoteList);
+      }
+
+      if (Array.isArray(state.entities)) {
+          engine.entities = state.entities.map((e: any) => ({ ...e }));
+      }
   };
 
   const computeStateHash = () => {
@@ -953,6 +1056,12 @@ export default function App() {
                   if (localHash && localHash !== hash) {
                       console.warn('Hash mismatch', { tick, localHash, remoteHash: hash, playerId: payload?.playerId });
                   }
+              }
+          }
+
+          if (t === 'game.state_sync') {
+              if (payload?.state) {
+                  applyStateSync(payload);
               }
           }
 
@@ -1270,9 +1379,11 @@ export default function App() {
             )}
          </div>
          <div className="flex items-center justify-end w-1/3 gap-2">
-             <div onClick={toggleMobilePause} className="md:hidden p-2 bg-gray-800 rounded border border-gray-700 active:bg-gray-700">
-                 {status === GameStatus.PAUSED ? <PlayIcon /> : <PauseIcon />}
-             </div>
+             {!onlineInGameRef.current && (
+                 <div onClick={toggleMobilePause} className="md:hidden p-2 bg-gray-800 rounded border border-gray-700 active:bg-gray-700">
+                     {status === GameStatus.PAUSED ? <PlayIcon /> : <PauseIcon />}
+                 </div>
+             )}
          </div>
       </header>
 
@@ -1743,9 +1854,11 @@ export default function App() {
           <div className="flex-none h-48 bg-black/95 border-t-2 border-gray-800 relative z-50 flex items-center justify-between px-8 md:px-32">
               <VirtualJoystick onMove={(v) => joystickMoveRef.current = v} label="MOVE" />
               <div className="flex flex-col gap-4 items-center justify-center">
-                  <button onClick={toggleMobilePause} className="w-16 h-16 rounded-full bg-gray-800 border border-gray-600 flex items-center justify-center active:bg-gray-700">
-                      {status === GameStatus.PAUSED ? <PlayIcon /> : <PauseIcon />}
-                  </button>
+                  {!onlineInGameRef.current && (
+                      <button onClick={toggleMobilePause} className="w-16 h-16 rounded-full bg-gray-800 border border-gray-600 flex items-center justify-center active:bg-gray-700">
+                          {status === GameStatus.PAUSED ? <PlayIcon /> : <PauseIcon />}
+                      </button>
+                  )}
                   {/* Added 'A' Button simulating Enter key */}
                   <button onClick={simulateEnter} className="w-16 h-16 rounded-full bg-green-700 border-2 border-green-500 flex items-center justify-center active:bg-green-600 shadow-lg" aria-label="Confirm">
                       <span className="font-black text-2xl text-white">A</span>
