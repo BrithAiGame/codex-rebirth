@@ -486,6 +486,20 @@ export default function App() {
               room: roomPos
           });
       };
+      engineRef.current.onPlayerDead = (x, y) => {
+          if (!isOnlineSession) return;
+          if (localDeadRef.current) return;
+          const playerId = localPlayerIdRef.current;
+          const label = `PLAYER ${(onlinePlayersRef.current[playerId]?.slot ?? 0) + 1}`;
+          localDeadRef.current = true;
+          engineRef.current!.deadLocal = true;
+          engineRef.current!.screenFlashTimer = 0;
+          engineRef.current!.cameraShakeTimer = 0;
+          deadPlayersRef.current.add(playerId);
+          addDeathMarker(playerId, x, y, label);
+          sendWs('game.player_dead', { playerId, x, y, label });
+          setDeadListVersion(v => v + 1);
+      };
   }, [isOnlineSession]);
 
   useEffect(() => { if (inputRef.current) inputRef.current.updateKeyMap(settings.keyMap); }, [settings.keyMap]);
@@ -884,6 +898,20 @@ export default function App() {
           }
           return true;
       });
+      if (roomRef?.savedEntities) {
+          roomRef.savedEntities = roomRef.savedEntities.filter(e => {
+              if (e.type !== EntityType.ITEM) return true;
+              const item = e as any;
+              if (choiceGroupId && item.choiceGroupId === choiceGroupId) return false;
+              if (!choiceGroupId && itemType && item.itemType !== itemType) return true;
+              if (x !== null && y !== null) {
+                  const dx = (item.x + item.w / 2) - x;
+                  const dy = (item.y + item.h / 2) - y;
+                  if (Math.hypot(dx, dy) <= threshold) return false;
+              }
+              return true;
+          });
+      }
   };
 
   const buildStateSync = () => {

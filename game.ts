@@ -62,6 +62,7 @@ export class GameEngine {
   // Callback to sync React UI
   onUiUpdate: (stats: any) => void;
   onItemCollected?: (item: ItemEntity, room: Room | null) => void;
+  onPlayerDead?: (x: number, y: number) => void;
 
   // Camera State
   cameraQuaternion: THREE.Quaternion = new THREE.Quaternion();
@@ -1762,6 +1763,9 @@ export class GameEngine {
                }
            });
       }
+      if (this.currentRoom && this.currentRoom.type === 'ITEM') {
+          this.currentRoom.itemCollected = true;
+      }
       if (this.onlineMode && this.onItemCollected) {
           this.onItemCollected(item, this.currentRoom);
       }
@@ -1863,6 +1867,11 @@ export class GameEngine {
               this.player.stats.hp = 0;
               this.deadLocal = true;
               this.status = GameStatus.PLAYING;
+              if (this.onPlayerDead) {
+                  const x = this.player.x + this.player.w / 2;
+                  const y = this.player.y + this.player.h / 2;
+                  this.onPlayerDead(x, y);
+              }
               return;
           }
           this.status = GameStatus.GAME_OVER;
