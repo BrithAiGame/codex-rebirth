@@ -54,6 +54,7 @@ export class GameEngine {
   floorThemeId: number | null = null;
   floorThemeLabel: string | null = null;
   difficulty: 'NORMAL' | 'HARD' = 'NORMAL';
+  onlineMode: boolean = false;
 
   // Callback to sync React UI
   onUiUpdate: (stats: any) => void;
@@ -72,6 +73,7 @@ export class GameEngine {
   startNewGame(characterId: string = 'alpha', difficulty: 'NORMAL' | 'HARD' = 'NORMAL') {
     this.characterId = characterId;
     this.difficulty = difficulty;
+    this.onlineMode = false;
     this.floorLevel = 1;
     this.score = 0;
     this.baseSeed = Math.floor(Math.random() * 1000000); // Initial random seed for the run
@@ -84,6 +86,7 @@ export class GameEngine {
   startNetworkGame(baseSeed: number, characterId: string = 'alpha', difficulty: 'NORMAL' | 'HARD' = 'NORMAL') {
     this.characterId = characterId;
     this.difficulty = difficulty;
+    this.onlineMode = true;
     this.floorLevel = 1;
     this.score = 0;
     this.baseSeed = baseSeed;
@@ -340,10 +343,10 @@ export class GameEngine {
   }
 
   spawnEnemiesForRoom(room: Room) {
-    const count = 2 + Math.floor(Math.random() * 3) + this.floorLevel;
+    const rng = new SeededRNG(room.seed + 100);
+    const count = 2 + rng.rangeInt(0, 2) + this.floorLevel;
     if (room.type === 'ITEM') return;
 
-    const rng = new SeededRNG(room.seed + 100);
     const validEnemies = ENEMIES.filter(e => e.minFloor <= this.floorLevel);
 
     const checkTileBlocked = (x: number, y: number, size: number): boolean => {
@@ -1056,6 +1059,38 @@ export class GameEngine {
       }
   }
 
+  spawnRemoteProjectile(x: number, y: number, dir: Vector2, characterId: string) {
+      const char = CHARACTERS.find(c => c.id === characterId) || CHARACTERS[0];
+      const stats = char.baseStats;
+      const speed = stats.shotSpeed;
+      const damage = stats.damage;
+      const knockback = stats.knockback;
+      let baseSize = CONSTANTS.PROJECTILE_SIZE;
+      const dmgFactor = Math.max(1, damage / 3.5);
+      baseSize = baseSize * dmgFactor;
+      baseSize *= stats.bulletScale;
+      const range = stats.range;
+
+      this.entities.push({
+          id: uuid(),
+          type: EntityType.PROJECTILE,
+          x: x - baseSize / 2,
+          y: y - baseSize / 2,
+          w: baseSize,
+          h: baseSize,
+          velocity: { x: dir.x * speed, y: dir.y * speed },
+          knockbackVelocity: { x: 0, y: 0 },
+          color: CONSTANTS.COLORS.PROJECTILE_FRIENDLY,
+          markedForDeletion: false,
+          ownerId: 'remote',
+          damage,
+          knockback,
+          lifeTime: range,
+          visualZ: 10,
+          fxOnly: true
+      } as ProjectileEntity);
+  }
+
   updateProjectile(p: ProjectileEntity) {
       p.x += p.velocity.x;
       p.y += p.velocity.y;
@@ -1068,6 +1103,7 @@ export class GameEngine {
           p.markedForDeletion = true;
           return;
       }
+      if (p.fxOnly) return;
       if (p.ownerId === 'player') {
            const enemies = this.entities.filter(e => e.type === EntityType.ENEMY);
            for (const enemy of enemies) {

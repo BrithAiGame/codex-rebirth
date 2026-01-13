@@ -298,6 +298,11 @@ export default function App() {
   const hasSnapshotRef = useRef(false);
   const serverTickBaseRef = useRef(0);
   const serverTickTimeRef = useRef(0);
+  const remotePrevPosRef = useRef<Record<string, { x: number; y: number }>>({});
+  const remoteFireCooldownRef = useRef<Record<string, number>>({});
+  const remoteShootDirRef = useRef<Record<string, Vector2>>({});
+  const remoteLastMoveRef = useRef<Record<string, number>>({});
+  const lastSnapshotTickRef = useRef(0);
 
   const [settings, setSettings] = useState<Settings>(() => {
     const isMobile = typeof window !== 'undefined' && (window.innerWidth <= 768 || /Mobi|Android/i.test(navigator.userAgent));
@@ -511,6 +516,7 @@ export default function App() {
 
   useEffect(() => {
       if (!onlineInGameRef.current || !gameStats?.currentRoomPos) return;
+      if (localPlayerIdRef.current !== onlineHostIdRef.current) return;
       if (!prevRoomPosRef.current) {
           prevRoomPosRef.current = { ...gameStats.currentRoomPos };
           return;
@@ -642,6 +648,11 @@ export default function App() {
               hasSnapshotRef.current = false;
               serverTickBaseRef.current = 0;
               serverTickTimeRef.current = performance.now();
+              remotePrevPosRef.current = {};
+              remoteFireCooldownRef.current = {};
+              remoteShootDirRef.current = {};
+              remoteLastMoveRef.current = {};
+              lastSnapshotTickRef.current = 0;
 
               if (engineRef.current) {
                   engineRef.current.startNetworkGame(baseSeed, localCharacterId, payload.difficulty || 'NORMAL');
@@ -672,9 +683,25 @@ export default function App() {
                   networkTickRef.current = tick;
               }
               hasSnapshotRef.current = true;
+              const tickDelta = Math.max(1, tick - lastSnapshotTickRef.current);
+              lastSnapshotTickRef.current = tick;
 
               const state = snap?.state;
               const players = state?.players || [];
+              const roomInfo = state?.room;
+              if (roomInfo && engineRef.current) {
+                  const current = engineRef.current.currentRoom;
+                  if (!current || current.x !== roomInfo.x || current.y !== roomInfo.y) {
+                      const target = engineRef.current.dungeon.find(r => r.x === roomInfo.x && r.y === roomInfo.y);
+                      if (target) {
+                          target.cleared = !!roomInfo.cleared;
+                          target.forcedOpen = !!roomInfo.forcedOpen;
+                          if (roomInfo.doors) target.doors = { ...target.doors, ...roomInfo.doors };
+                          engineRef.current.enterRoom(target, null);
+                          prevRoomPosRef.current = { x: roomInfo.x, y: roomInfo.y };
+                      }
+                  }
+              }
               const remotePlayers = [];
               const localId = localPlayerIdRef.current;
               const playerMap = onlinePlayersRef.current;
@@ -698,13 +725,43 @@ export default function App() {
                       }
                   } else {
                       const playerMeta = playerMap[p.id];
+                      const now = performance.now();
+                      const prev = remotePrevPosRef.current[p.id];
+                      const dx = prev ? p.x - prev.x : 0;
+                      const dy = prev ? p.y - prev.y : 0;
+                      if (Math.hypot(dx, dy) > 0.5) {
+                          const len = Math.hypot(dx, dy) || 1;
+                          remoteShootDirRef.current[p.id] = { x: dx / len, y: dy / len };
+                          remoteLastMoveRef.current[p.id] = now;
+                      }
+
+                      const characterId = playerMeta?.characterId || 'alpha';
+                      const stats = CHARACTERS.find(c => c.id === characterId)?.baseStats || CHARACTERS[0].baseStats;
+                      const cd = remoteFireCooldownRef.current[p.id] ?? 0;
+                      const movedRecently = (now - (remoteLastMoveRef.current[p.id] || 0)) < 600;
+                      const dir = remoteShootDirRef.current[p.id];
+                      if (dir && movedRecently) {
+                          const nextCd = cd - tickDelta;
+                          if (nextCd <= 0) {
+                              const spawnX = p.x + p.w / 2;
+                              const spawnY = p.y + p.h / 2;
+                              engineRef.current?.spawnRemoteProjectile(spawnX, spawnY, dir, characterId);
+                              remoteFireCooldownRef.current[p.id] = stats.fireRate;
+                          } else {
+                              remoteFireCooldownRef.current[p.id] = nextCd;
+                          }
+                      } else {
+                          remoteFireCooldownRef.current[p.id] = Math.max(0, cd - tickDelta);
+                      }
+
+                      remotePrevPosRef.current[p.id] = { x: p.x, y: p.y };
                       remotePlayers.push({
                           id: p.id,
                           x: p.x,
                           y: p.y,
                           w: p.w,
                           h: p.h,
-                          characterId: playerMeta?.characterId || 'alpha'
+                          characterId
                       });
                   }
               }
@@ -742,6 +799,11 @@ export default function App() {
       hasSnapshotRef.current = false;
       serverTickBaseRef.current = 0;
       serverTickTimeRef.current = 0;
+      remotePrevPosRef.current = {};
+      remoteFireCooldownRef.current = {};
+      remoteShootDirRef.current = {};
+      remoteLastMoveRef.current = {};
+      lastSnapshotTickRef.current = 0;
       setStatus(GameStatus.MENU);
       setShowSettings(false);
   };
