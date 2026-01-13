@@ -286,6 +286,7 @@ export default function App() {
   const [onlineHostId, setOnlineHostId] = useState<string>('');
   const [localPlayerId, setLocalPlayerId] = useState<string>('');
   const [wsStatus, setWsStatus] = useState<'idle' | 'connecting' | 'open' | 'closed' | 'error'>('idle');
+  const [isOnlineSession, setIsOnlineSession] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const seqRef = useRef(1);
   const roomIdRef = useRef('');
@@ -314,6 +315,7 @@ export default function App() {
   const lastRoomDirRef = useRef<Direction | null>(null);
   const localTickRef = useRef(0);
   const hashHistoryRef = useRef<Map<number, string>>(new Map());
+  const suppressRoomBroadcastRef = useRef(false);
 
   const [settings, setSettings] = useState<Settings>(() => {
     const isMobile = typeof window !== 'undefined' && (window.innerWidth <= 768 || /Mobi|Android/i.test(navigator.userAgent));
@@ -609,7 +611,11 @@ export default function App() {
 
   useEffect(() => {
       if (!onlineInGameRef.current || !gameStats?.currentRoomPos) return;
-      if (localPlayerIdRef.current !== onlineHostIdRef.current) return;
+      if (suppressRoomBroadcastRef.current) {
+          suppressRoomBroadcastRef.current = false;
+          prevRoomPosRef.current = { ...gameStats.currentRoomPos };
+          return;
+      }
       if (!prevRoomPosRef.current) {
           prevRoomPosRef.current = { ...gameStats.currentRoomPos };
           return;
@@ -625,6 +631,7 @@ export default function App() {
 
   const startGame = () => {
     if (engineRef.current) {
+      setIsOnlineSession(false);
       engineRef.current.startNewGame(CHARACTERS[selectedCharIndex].id, DIFFICULTY_OPTIONS[difficultyIndex].id);
       setStatus(GameStatus.PLAYING);
       setShowSettings(false);
@@ -800,6 +807,9 @@ export default function App() {
       if (!engineRef.current) return;
       const isLocalHost = localPlayerIdRef.current === onlineHostIdRef.current;
       const isLocalActor = actorId && actorId === localPlayerIdRef.current;
+      if (actorId && !isLocalActor) {
+          suppressRoomBroadcastRef.current = true;
+      }
       const current = engineRef.current.currentRoom;
       if (!current) return;
       const shouldEnter = !(isLocalHost && isLocalActor);
@@ -811,7 +821,9 @@ export default function App() {
       if (!target) return;
 
       if (shouldEnter) {
-          engineRef.current.enterRoom(target, dir);
+          if (target.x !== current.x || target.y !== current.y) {
+              engineRef.current.enterRoom(target, dir);
+          }
       }
       lastRoomCoordRef.current = { x: target.x, y: target.y };
       lastRoomDirRef.current = dir;
@@ -997,6 +1009,7 @@ export default function App() {
               const baseSeed = payload.baseSeed || Math.floor(Math.random() * 1000000);
 
               onlineInGameRef.current = true;
+              setIsOnlineSession(true);
               prevRoomPosRef.current = null;
               networkTickRef.current = 0;
               lastServerTickRef.current = 0;
@@ -1092,6 +1105,7 @@ export default function App() {
       if (engineRef.current) engineRef.current.status = GameStatus.MENU;
       sendWs('room.leave');
       onlineInGameRef.current = false;
+      setIsOnlineSession(false);
       prevRoomPosRef.current = null;
       hasSnapshotRef.current = false;
       serverTickBaseRef.current = 0;
@@ -1112,7 +1126,7 @@ export default function App() {
       setShowSettings(false);
   };
   const toggleMobilePause = () => {
-      if (onlineInGameRef.current) return;
+      if (isOnlineSession) return;
       if (status === GameStatus.PLAYING) { if (engineRef.current) engineRef.current.status = GameStatus.PAUSED; setStatus(GameStatus.PAUSED); } 
       else if (status === GameStatus.PAUSED) { resumeGame(); }
   };
@@ -1379,7 +1393,7 @@ export default function App() {
             )}
          </div>
          <div className="flex items-center justify-end w-1/3 gap-2">
-             {!onlineInGameRef.current && (
+             {!isOnlineSession && (
                  <div onClick={toggleMobilePause} className="md:hidden p-2 bg-gray-800 rounded border border-gray-700 active:bg-gray-700">
                      {status === GameStatus.PAUSED ? <PlayIcon /> : <PauseIcon />}
                  </div>
@@ -1429,7 +1443,7 @@ export default function App() {
                             {settings.showFPS && <Stats className="fps-stats" />}
                             {engineRef.current && (
                                 <>
-                                <GameLoop engine={engineRef.current} input={inputRef} joyMove={joystickMoveRef} joyShoot={joystickShootRef} fpsLock={settings.fpsLock} latestInput={latestInputRef} isOnline={onlineInGameRef.current} />
+                                <GameLoop engine={engineRef.current} input={inputRef} joyMove={joystickMoveRef} joyShoot={joystickShootRef} fpsLock={settings.fpsLock} latestInput={latestInputRef} isOnline={isOnlineSession} />
                                     <GameScene engine={engineRef.current} />
                                 </>
                             )}
@@ -1854,7 +1868,7 @@ export default function App() {
           <div className="flex-none h-48 bg-black/95 border-t-2 border-gray-800 relative z-50 flex items-center justify-between px-8 md:px-32">
               <VirtualJoystick onMove={(v) => joystickMoveRef.current = v} label="MOVE" />
               <div className="flex flex-col gap-4 items-center justify-center">
-                  {!onlineInGameRef.current && (
+                  {!isOnlineSession && (
                       <button onClick={toggleMobilePause} className="w-16 h-16 rounded-full bg-gray-800 border border-gray-600 flex items-center justify-center active:bg-gray-700">
                           {status === GameStatus.PAUSED ? <PlayIcon /> : <PauseIcon />}
                       </button>
