@@ -4,7 +4,7 @@ import { Canvas, useThree, useFrame } from '@react-three/fiber';
 import { Stats } from '@react-three/drei';
 import { GameEngine } from './game';
 import { InputManager } from './utils';
-import { GameStatus, Settings, Language, KeyMap, Stats as GameStats, Vector2, ItemType, Direction } from './types';
+import { GameStatus, Settings, Language, KeyMap, Stats as GameStats, Vector2, ItemType, Direction, EntityType } from './types';
 import { CONSTANTS, TRANSLATIONS, DEFAULT_KEYMAP } from './constants';
 import { CHARACTERS } from './config/characters';
 import { ITEMS, DROPS } from './config/items';
@@ -171,8 +171,9 @@ const CameraRig = () => {
 };
 
 // Main Loop
-const GameLoop: React.FC<{ engine: GameEngine, input: React.MutableRefObject<InputManager | null>, joyMove: React.MutableRefObject<Vector2>, joyShoot: React.MutableRefObject<Vector2>, fpsLock: 30 | 60, latestInput: React.MutableRefObject<LocalInput>, isOnline: boolean }> = ({ engine, input, joyMove, joyShoot, fpsLock, latestInput, isOnline }) => {
+const GameLoop: React.FC<{ engine: GameEngine, input: React.MutableRefObject<InputManager | null>, joyMove: React.MutableRefObject<Vector2>, joyShoot: React.MutableRefObject<Vector2>, fpsLock: 30 | 60, latestInput: React.MutableRefObject<LocalInput>, isOnline: boolean, isHost: boolean, onHostRestart: () => void }> = ({ engine, input, joyMove, joyShoot, fpsLock, latestInput, isOnline, isHost, onHostRestart }) => {
     const { invalidate } = useThree();
+    const restartHoldRef = useRef(0);
     useEffect(() => {
         const effectiveFps = isOnline ? 60 : fpsLock;
         const frameInterval = 1000 / effectiveFps;
@@ -196,9 +197,10 @@ const GameLoop: React.FC<{ engine: GameEngine, input: React.MutableRefObject<Inp
                             y: (Math.abs(kbMove.y) > 0 ? kbMove.y : joyMove.current.y)
                         };
                         const shoot = (kbShoot && (Math.abs(kbShoot.x) > 0 || Math.abs(kbShoot.y) > 0)) ? kbShoot : (Math.abs(joyShoot.current.x) > 0.2 || Math.abs(joyShoot.current.y) > 0.2) ? joyShoot.current : null;
-                        const restart = input.current.isRestartPressed();
+                        const restartPressed = input.current.isRestartPressed();
                         const pause = isOnline ? false : input.current.isPausePressed();
                         const bomb = input.current.isBombPressed();
+                        const restart = !isOnline ? restartPressed : false;
                         const shotMeta = shoot ? {
                             damage: engine.player.stats.damage,
                             fireRate: engine.player.stats.fireRate,
@@ -213,6 +215,17 @@ const GameLoop: React.FC<{ engine: GameEngine, input: React.MutableRefObject<Inp
                             : '';
                         latestInput.current = { move, shoot, bomb, pause, restart, shotMeta, shotMetaKey };
                         engine.update({ move, shoot, restart, pause, bomb }, frameInterval / 1000);
+
+                        if (isOnline && isHost) {
+                            if (restartPressed) {
+                                restartHoldRef.current += 1;
+                                if (restartHoldRef.current === 60) {
+                                    onHostRestart();
+                                }
+                            } else {
+                                restartHoldRef.current = 0;
+                            }
+                        }
                     }
                 }
                 accumulator -= frameInterval;
@@ -330,6 +343,9 @@ export default function App() {
   const localTickRef = useRef(0);
   const hashHistoryRef = useRef<Map<number, string>>(new Map());
   const suppressRoomBroadcastRef = useRef(false);
+  const deadPlayersRef = useRef<Set<string>>(new Set());
+  const localDeadRef = useRef(false);
+  const deathMarkersRef = useRef<Set<string>>(new Set());
 
   const [settings, setSettings] = useState<Settings>(() => {
     const isMobile = typeof window !== 'undefined' && (window.innerWidth <= 768 || /Mobi|Android/i.test(navigator.userAgent));
@@ -491,6 +507,21 @@ export default function App() {
   }, [status]);
 
   useEffect(() => {
+      if (!isOnlineSession || status !== GameStatus.GAME_OVER) return;
+      if (localDeadRef.current) return;
+      const playerId = localPlayerIdRef.current;
+      const label = `PLAYER ${(onlinePlayersRef.current[playerId]?.slot ?? 0) + 1}`;
+      if (engineRef.current) {
+          const x = engineRef.current.player.x + engineRef.current.player.w / 2;
+          const y = engineRef.current.player.y + engineRef.current.player.h / 2;
+          localDeadRef.current = true;
+          deadPlayersRef.current.add(playerId);
+          addDeathMarker(playerId, x, y, label);
+          sendWs('game.player_dead', { playerId, x, y, label });
+      }
+  }, [status, isOnlineSession]);
+
+  useEffect(() => {
       if (!onlineInGameRef.current || status !== GameStatus.PLAYING) return;
       const tickInterval = setInterval(() => {
           localTickRef.current += 1;
@@ -499,6 +530,7 @@ export default function App() {
           const ws = wsRef.current;
           if (!ws || ws.readyState !== WebSocket.OPEN) return;
           if (!onlineInGameRef.current) return;
+          if (localDeadRef.current) return;
 
           const now = performance.now();
           const latest = latestInputRef.current;
@@ -546,6 +578,25 @@ export default function App() {
           clearInterval(tickInterval);
       };
   }, [roomId, status]);
+
+  useEffect(() => {
+      if (!isOnlineSession) return;
+      const interval = setInterval(() => {
+          const ws = wsRef.current;
+          if (!ws || ws.readyState !== WebSocket.OPEN) return;
+          if (!engineRef.current) return;
+          const x = engineRef.current.player.x + engineRef.current.player.w / 2;
+          const y = engineRef.current.player.y + engineRef.current.player.h / 2;
+          ws.send(JSON.stringify({
+              t: 'game.heartbeat',
+              roomId: roomIdRef.current,
+              seq: seqRef.current++,
+              clientTime: Date.now(),
+              payload: { x, y }
+          }));
+      }, 1000);
+      return () => clearInterval(interval);
+  }, [roomId, isOnlineSession]);
 
   useEffect(() => {
       if (!onlineInGameRef.current || status !== GameStatus.PLAYING) return;
@@ -708,6 +759,26 @@ export default function App() {
       return (hash >>> 0).toString(16);
   };
 
+  const addDeathMarker = (playerId: string, x: number, y: number, label: string) => {
+      if (!engineRef.current) return;
+      const markerId = `skull_${playerId}`;
+      if (deathMarkersRef.current.has(markerId)) return;
+      deathMarkersRef.current.add(markerId);
+      engineRef.current.entities.push({
+          id: markerId,
+          type: EntityType.SKULL,
+          x: x - 12,
+          y: y - 12,
+          w: 24,
+          h: 24,
+          velocity: { x: 0, y: 0 },
+          knockbackVelocity: { x: 0, y: 0 },
+          color: '#ffffff',
+          markedForDeletion: false,
+          label
+      } as any);
+  };
+
   const buildStateSync = () => {
       if (!engineRef.current) return null;
       const engine = engineRef.current;
@@ -749,6 +820,7 @@ export default function App() {
                     }
                   : null,
               players,
+              deadPlayers: Array.from(deadPlayersRef.current),
               entities: engine.entities.map(e => ({ ...e }))
           }
       };
@@ -776,12 +848,19 @@ export default function App() {
           }
       }
 
+      if (Array.isArray(state.deadPlayers)) {
+          deadPlayersRef.current = new Set(state.deadPlayers);
+      }
+
       if (Array.isArray(state.players)) {
           const localId = localPlayerIdRef.current;
           remoteSimStateRef.current = {};
           const remoteList: { id: string; x: number; y: number; w: number; h: number; characterId: string }[] = [];
           state.players.forEach((p: any) => {
               if (!p || !p.id) return;
+              if (deadPlayersRef.current.has(p.id)) {
+                  return;
+              }
               if (p.id === localId) {
                   engine.player.x = p.x ?? engine.player.x;
                   engine.player.y = p.y ?? engine.player.y;
@@ -1069,6 +1148,9 @@ export default function App() {
               lastRoomCoordRef.current = null;
               lastRoomDirRef.current = null;
               localTickRef.current = 0;
+              deadPlayersRef.current = new Set();
+              localDeadRef.current = false;
+              deathMarkersRef.current = new Set();
 
               if (engineRef.current) {
                   engineRef.current.startNetworkGame(baseSeed, localCharacterId, payload.difficulty || 'NORMAL');
@@ -1090,6 +1172,18 @@ export default function App() {
                   remoteSimStateRef.current[p.id] = { ...p };
               });
               engineRef.current?.syncRemotePlayers(remotePlayers);
+          }
+
+          if (t === 'game.restart') {
+              const seed = payload?.seed;
+              const localId = localPlayerIdRef.current;
+              const characterId = onlinePlayersRef.current[localId]?.characterId || 'alpha';
+              if (typeof seed === 'number' && engineRef.current) {
+                  engineRef.current.startNetworkGame(seed, characterId, 'NORMAL');
+                  localDeadRef.current = false;
+                  deadPlayersRef.current = new Set();
+                  deathMarkersRef.current = new Set();
+              }
           }
 
           if (t === 'game.snapshot') {
@@ -1116,6 +1210,22 @@ export default function App() {
           if (t === 'game.state_sync') {
               if (payload?.state) {
                   applyStateSync(payload);
+              }
+          }
+
+          if (t === 'game.player_dead') {
+              const playerId = payload?.playerId;
+              if (!playerId || typeof playerId !== 'string') return;
+              const x = typeof payload?.x === 'number' ? payload.x : undefined;
+              const y = typeof payload?.y === 'number' ? payload.y : undefined;
+              const label = typeof payload?.label === 'string' ? payload.label : `PLAYER ${payload?.slot ?? ''}`.trim();
+              deadPlayersRef.current.add(playerId);
+              if (remoteSimStateRef.current[playerId]) {
+                  delete remoteSimStateRef.current[playerId];
+                  engineRef.current?.syncRemotePlayers(Object.values(remoteSimStateRef.current));
+              }
+              if (x !== undefined && y !== undefined) {
+                  addDeathMarker(playerId, x, y, label);
               }
           }
 
@@ -1163,6 +1273,9 @@ export default function App() {
       lastRoomCoordRef.current = null;
       lastRoomDirRef.current = null;
       localTickRef.current = 0;
+      deadPlayersRef.current = new Set();
+      localDeadRef.current = false;
+      deathMarkersRef.current = new Set();
       setStatus(GameStatus.MENU);
       setShowSettings(false);
   };
@@ -1170,6 +1283,18 @@ export default function App() {
       if (isOnlineSession) return;
       if (status === GameStatus.PLAYING) { if (engineRef.current) engineRef.current.status = GameStatus.PAUSED; setStatus(GameStatus.PAUSED); } 
       else if (status === GameStatus.PAUSED) { resumeGame(); }
+  };
+
+  const handleHostRestart = () => {
+      if (!isOnlineSession) return;
+      if (localPlayerIdRef.current !== onlineHostIdRef.current) return;
+      const localId = localPlayerIdRef.current;
+      const characterId = onlinePlayersRef.current[localId]?.characterId || 'alpha';
+      const newSeed = Math.floor(Math.random() * 1_000_000);
+      if (engineRef.current) {
+          engineRef.current.startNetworkGame(newSeed, characterId, 'NORMAL');
+      }
+      sendWs('game.restart', { seed: newSeed });
   };
   const simulateEnter = () => {
       window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Enter', bubbles: true }));
@@ -1484,7 +1609,7 @@ export default function App() {
                             {settings.showFPS && <Stats className="fps-stats" />}
                             {engineRef.current && (
                                 <>
-                                <GameLoop engine={engineRef.current} input={inputRef} joyMove={joystickMoveRef} joyShoot={joystickShootRef} fpsLock={settings.fpsLock} latestInput={latestInputRef} isOnline={isOnlineSession} />
+                                <GameLoop engine={engineRef.current} input={inputRef} joyMove={joystickMoveRef} joyShoot={joystickShootRef} fpsLock={settings.fpsLock} latestInput={latestInputRef} isOnline={isOnlineSession} isHost={localPlayerIdRef.current === onlineHostIdRef.current} onHostRestart={handleHostRestart} />
                                     <GameScene engine={engineRef.current} />
                                 </>
                             )}

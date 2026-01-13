@@ -16,7 +16,8 @@ export enum EntityType {
   BOMB = 'BOMB',
   DOOR = 'DOOR',
   TRAPDOOR = 'TRAPDOOR',
-  PEDESTAL = 'PEDESTAL'
+  PEDESTAL = 'PEDESTAL',
+  SKULL = 'SKULL'
 }
 
 export enum EnemyType {
@@ -182,6 +183,10 @@ export interface BombEntity extends Entity {
 export interface RemotePlayerEntity extends Entity {
   playerId: string;
   characterId: string;
+}
+
+export interface SkullEntity extends Entity {
+  label: string;
 }
 
 export interface Room {

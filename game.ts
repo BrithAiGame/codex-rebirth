@@ -1,7 +1,7 @@
 
 import { CONSTANTS } from './constants';
 import { 
-  Entity, PlayerEntity, EnemyEntity, ProjectileEntity, ItemEntity, BombEntity, RemotePlayerEntity,
+  Entity, PlayerEntity, EnemyEntity, ProjectileEntity, ItemEntity, BombEntity, RemotePlayerEntity, SkullEntity,
   EntityType, EnemyType, Direction, Stats, ItemType, GameStatus, Room, Rect, Vector2 
 } from './types';
 import { uuid, checkAABB, distance, normalizeVector, SeededRNG } from './utils';

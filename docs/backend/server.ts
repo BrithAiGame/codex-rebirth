@@ -55,6 +55,8 @@ type Room = {
 type Session = {
   playerId: string;
   roomId?: string;
+  lastHeartbeat?: number;
+  lastPos?: { x: number; y: number };
 };
 
 const app = express();
@@ -67,6 +69,7 @@ const wss = new WebSocketServer({ server });
 
 const rooms = new Map<string, Room>();
 const sessions = new Map<WebSocket, Session>();
+const deadPlayers = new Map<string, Set<string>>();
 
 function now() {
   return Date.now();
@@ -140,6 +143,18 @@ function handleLeave(ws: WebSocket, session: Session) {
   if (!roomId) return;
   const room = rooms.get(roomId);
   if (!room) return;
+  const deadSet = deadPlayers.get(roomId) ?? new Set<string>();
+  if (!deadSet.has(session.playerId)) {
+    deadSet.add(session.playerId);
+    deadPlayers.set(roomId, deadSet);
+    const label = `PLAYER ${(room.players.get(session.playerId)?.slot ?? 0) + 1}`;
+    const pos = session.lastPos;
+    broadcast(room, {
+      t: "game.player_dead",
+      roomId,
+      payload: { playerId: session.playerId, x: pos?.x, y: pos?.y, label }
+    });
+  }
 
   const player = room.players.get(session.playerId);
   if (player) {
@@ -154,6 +169,7 @@ function handleLeave(ws: WebSocket, session: Session) {
   if (room.players.size === 0) {
     stopRoom(room);
     rooms.delete(roomId);
+    deadPlayers.delete(roomId);
     session.roomId = undefined;
     sessions.set(ws, session);
     return;
@@ -387,6 +403,8 @@ function handleMessage(ws: WebSocket, raw: string) {
         error(ws, "INVALID_ACTION", "Invalid input.", ack);
         return;
       }
+      session.lastHeartbeat = now();
+      sessions.set(ws, session);
 
       broadcastExcept(room, session.playerId, {
         t: "game.input_broadcast",
@@ -396,6 +414,60 @@ function handleMessage(ws: WebSocket, raw: string) {
           tick,
           input
         }
+      });
+      break;
+    }
+    case "game.heartbeat": {
+      const session = sessions.get(ws);
+      if (!session) return;
+      session.lastHeartbeat = now();
+      if (typeof msg.payload?.x === "number" && typeof msg.payload?.y === "number") {
+        session.lastPos = { x: msg.payload.x, y: msg.payload.y };
+      }
+      sessions.set(ws, session);
+      break;
+    }
+    case "game.player_dead": {
+      const room = ensureRoom(msg.roomId, ws, ack);
+      if (!room) return;
+      const playerId = msg.payload?.playerId;
+      if (typeof playerId !== "string") {
+        error(ws, "INVALID_ACTION", "Invalid playerId.", ack);
+        return;
+      }
+      const deadSet = deadPlayers.get(room.id) ?? new Set<string>();
+      if (deadSet.has(playerId)) return;
+      deadSet.add(playerId);
+      deadPlayers.set(room.id, deadSet);
+      broadcast(room, {
+        t: "game.player_dead",
+        roomId: room.id,
+        payload: msg.payload
+      });
+      break;
+    }
+    case "game.restart": {
+      const room = ensureRoom(msg.roomId, ws, ack);
+      if (!room) return;
+      const session = sessions.get(ws);
+      if (!session) return;
+      if (session.playerId !== room.hostId) {
+        error(ws, "NOT_HOST", "Only host can restart.", ack);
+        return;
+      }
+      const seed = msg.payload?.seed;
+      if (typeof seed !== "number") {
+        error(ws, "INVALID_ACTION", "Invalid seed.", ack);
+        return;
+      }
+      room.baseSeed = seed;
+      room.locked = true;
+      startRoom(room);
+      deadPlayers.set(room.id, new Set());
+      broadcast(room, {
+        t: "game.restart",
+        roomId: room.id,
+        payload: { seed }
       });
       break;
     }
@@ -458,7 +530,7 @@ function handleMessage(ws: WebSocket, raw: string) {
 }
 
 wss.on("connection", (ws) => {
-  sessions.set(ws, { playerId: `guest-${Math.floor(Math.random() * 999999)}` });
+  sessions.set(ws, { playerId: `guest-${Math.floor(Math.random() * 999999)}`, lastHeartbeat: now() });
   (ws as WebSocket & { isAlive?: boolean }).isAlive = true;
 
   ws.on("pong", () => {
@@ -466,6 +538,11 @@ wss.on("connection", (ws) => {
   });
 
   ws.on("message", (data) => {
+    const session = sessions.get(ws);
+    if (session) {
+      session.lastHeartbeat = now();
+      sessions.set(ws, session);
+    }
     if (typeof data !== "string") {
       handleMessage(ws, data.toString());
       return;
@@ -496,7 +573,30 @@ const heartbeat = setInterval(() => {
 
 wss.on("close", () => {
   clearInterval(heartbeat);
+  clearInterval(deathCheck);
 });
+
+const deathCheck = setInterval(() => {
+  const nowMs = now();
+  for (const [ws, session] of sessions.entries()) {
+    if (!session.roomId) continue;
+    if (!session.lastHeartbeat) continue;
+    if (nowMs - session.lastHeartbeat <= 3000) continue;
+    const room = rooms.get(session.roomId);
+    if (!room) continue;
+    const deadSet = deadPlayers.get(room.id) ?? new Set<string>();
+    if (deadSet.has(session.playerId)) continue;
+    deadSet.add(session.playerId);
+    deadPlayers.set(room.id, deadSet);
+    const label = `PLAYER ${(room.players.get(session.playerId)?.slot ?? 0) + 1}`;
+    const pos = session.lastPos;
+    broadcast(room, {
+      t: "game.player_dead",
+      roomId: room.id,
+      payload: { playerId: session.playerId, x: pos?.x, y: pos?.y, label }
+    });
+  }
+}, 1000);
 
 server.listen(PORT, () => {
   console.log(`WebSocket server listening on ${PORT}`);

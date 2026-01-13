@@ -1,8 +1,9 @@
 
 import React, { useRef, useMemo, useState, useEffect, useLayoutEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
+import { Text } from '@react-three/drei';
 import { GameEngine } from './game';
-import { Entity, EntityType, PlayerEntity, EnemyEntity, ProjectileEntity, ItemEntity, BombEntity, RemotePlayerEntity, Room } from './types';
+import { Entity, EntityType, PlayerEntity, EnemyEntity, ProjectileEntity, ItemEntity, BombEntity, RemotePlayerEntity, Room, SkullEntity } from './types';
 import { CONSTANTS } from './constants';
 import * as THREE from 'three';
 import { AssetLoader } from './assets';
@@ -319,6 +320,9 @@ const getEntityAssetData = (e: Entity, engine: GameEngine) => {
         spriteMatrix = SPRITES.PEDESTAL;
         const P = CONSTANTS.PALETTE;
         palette = ['', P.PEDESTAL_TOP, P.PEDESTAL_SIDE, '#000000'];
+    } else if (e.type === EntityType.SKULL) {
+        spriteMatrix = SPRITES.SKULL;
+        palette = ['', '#e5e7eb', '#9ca3af', '#111827'];
     }
 
     return { spriteMatrix, palette };
@@ -487,7 +491,31 @@ const EntityGroup: React.FC<{ entity: Entity, engine: GameEngine }> = React.memo
          );
     }
 
-    // 5. Characters, Items, Enemies: VOXEL MESHES
+    // 5. Skull Marker
+    if (entity.type === EntityType.SKULL) {
+        const skull = entity as SkullEntity;
+        return (
+            <group ref={groupRef}>
+                <VoxelMesh 
+                    spriteMatrix={spriteMatrix} 
+                    colors={palette} 
+                    scaleFactor={width} 
+                    flash={false} 
+                />
+                <Text
+                    position={[0, -0.35, 0]}
+                    fontSize={0.18}
+                    color="#e5e7eb"
+                    anchorX="center"
+                    anchorY="top"
+                >
+                    {skull.label}
+                </Text>
+            </group>
+        );
+    }
+
+    // 6. Characters, Items, Enemies: VOXEL MESHES
     const isFlash = (entity.flashTimer && entity.flashTimer > 0) || 
                     (entity.type === EntityType.PLAYER && (entity as PlayerEntity).invincibleTimer > 0 && Math.floor((entity as PlayerEntity).invincibleTimer / 4) % 2 === 0);
 
