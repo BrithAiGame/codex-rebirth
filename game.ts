@@ -31,6 +31,7 @@ export class GameEngine {
   
   player: PlayerEntity;
   remotePlayers: Map<string, RemotePlayerEntity> = new Map();
+  remoteTargets: Map<string, { x: number; y: number }> = new Map();
   entities: Entity[] = [];
   currentRoom: Room | null = null;
   dungeon: Room[] = [];
@@ -193,6 +194,7 @@ export class GameEngine {
     // Clear dynamic entities
     this.entities = [];
     this.remotePlayers.clear();
+    this.remoteTargets.clear();
 
     // Position Player based on entry direction (Movement Direction)
     const cx = CONSTANTS.CANVAS_WIDTH / 2;
@@ -288,15 +290,16 @@ export class GameEngine {
     const next = new Map<string, RemotePlayerEntity>();
     players.forEach(p => {
       const prev = this.remotePlayers.get(p.id);
-      const vx = prev ? p.x - prev.x : 0;
-      const vy = prev ? p.y - prev.y : 0;
+      const vx = prev ? prev.velocity.x : 0;
+      const vy = prev ? prev.velocity.y : 0;
+      this.remoteTargets.set(p.id, { x: p.x, y: p.y });
       next.set(p.id, {
         id: `remote_${p.id}`,
         type: EntityType.REMOTE_PLAYER,
         playerId: p.id,
         characterId: p.characterId,
-        x: p.x,
-        y: p.y,
+        x: prev ? prev.x : p.x,
+        y: prev ? prev.y : p.y,
         w: p.w,
         h: p.h,
         velocity: { x: vx, y: vy },
@@ -307,6 +310,33 @@ export class GameEngine {
       });
     });
     this.remotePlayers = next;
+  }
+
+  updateRemotePlayers(dt: number) {
+    const lerpFactor = Math.min(1, dt * 8);
+    this.remotePlayers.forEach((player, id) => {
+      const target = this.remoteTargets.get(id);
+      if (!target) return;
+      const dx = target.x - player.x;
+      const dy = target.y - player.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > 60) {
+        player.x = target.x;
+        player.y = target.y;
+        player.velocity.x = 0;
+        player.velocity.y = 0;
+        return;
+      }
+      if (dist < 0.5) {
+        player.velocity.x = 0;
+        player.velocity.y = 0;
+        return;
+      }
+      player.velocity.x = dx * 0.5;
+      player.velocity.y = dy * 0.5;
+      player.x += dx * lerpFactor;
+      player.y += dy * lerpFactor;
+    });
   }
 
   spawnEnemiesForRoom(room: Room) {
@@ -939,6 +969,7 @@ export class GameEngine {
     });
 
     this.entities = this.entities.filter(e => !e.markedForDeletion);
+    this.updateRemotePlayers(dt);
     this.onUiUpdate(this.getUiState());
   }
   

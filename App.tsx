@@ -290,10 +290,14 @@ export default function App() {
   const localPlayerIdRef = useRef('');
   const onlineHostIdRef = useRef('');
   const latestInputRef = useRef<{ move: Vector2; shoot: Vector2 | null; bomb: boolean; pause: boolean; restart: boolean }>({ move: {x:0, y:0}, shoot: null, bomb: false, pause: false, restart: false });
+  const lastSentInputRef = useRef<{ move: Vector2; shoot: Vector2 | null; bomb: boolean; pause: boolean; restart: boolean } | null>(null);
+  const lastInputSendTimeRef = useRef(0);
   const networkTickRef = useRef(0);
   const lastServerTickRef = useRef(0);
   const onlineInGameRef = useRef(false);
   const hasSnapshotRef = useRef(false);
+  const serverTickBaseRef = useRef(0);
+  const serverTickTimeRef = useRef(0);
 
   const [settings, setSettings] = useState<Settings>(() => {
     const isMobile = typeof window !== 'undefined' && (window.innerWidth <= 768 || /Mobi|Android/i.test(navigator.userAgent));
@@ -460,8 +464,37 @@ export default function App() {
           const ws = wsRef.current;
           if (!ws || ws.readyState !== WebSocket.OPEN) return;
           if (!hasSnapshotRef.current) return;
-          const nextTick = Math.max(lastServerTickRef.current + 1, networkTickRef.current + 1);
+
+          const now = performance.now();
+          const latest = latestInputRef.current;
+          const lastSent = lastSentInputRef.current;
+          const heartbeatDue = now - lastInputSendTimeRef.current >= 200;
+
+          const changed =
+              !lastSent ||
+              lastSent.move.x !== latest.move.x ||
+              lastSent.move.y !== latest.move.y ||
+              (lastSent.shoot?.x ?? 0) !== (latest.shoot?.x ?? 0) ||
+              (lastSent.shoot?.y ?? 0) !== (latest.shoot?.y ?? 0) ||
+              lastSent.bomb !== latest.bomb ||
+              lastSent.pause !== latest.pause ||
+              lastSent.restart !== latest.restart;
+
+          if (!changed && !heartbeatDue) return;
+
+          const nowMs = performance.now();
+          const elapsed = nowMs - serverTickTimeRef.current;
+          const estimatedTick = Math.max(
+              lastServerTickRef.current,
+              serverTickBaseRef.current + Math.floor(elapsed / (1000 / 60))
+          );
+          let nextTick = Math.max(estimatedTick, lastServerTickRef.current + 1);
+          nextTick = Math.max(nextTick, networkTickRef.current + 1);
+          if (nextTick > estimatedTick + 1) nextTick = estimatedTick + 1;
           networkTickRef.current = nextTick;
+          lastInputSendTimeRef.current = now;
+          lastSentInputRef.current = { ...latest };
+
           ws.send(JSON.stringify({
               t: 'game.input',
               roomId: roomIdRef.current,
@@ -469,10 +502,10 @@ export default function App() {
               clientTime: Date.now(),
               payload: {
                   tick: nextTick,
-                  input: latestInputRef.current
+                  input: latest
               }
           }));
-      }, 1000 / 60);
+      }, 50);
       return () => clearInterval(interval);
   }, [roomId, status]);
 
@@ -607,6 +640,8 @@ export default function App() {
               networkTickRef.current = 0;
               lastServerTickRef.current = 0;
               hasSnapshotRef.current = false;
+              serverTickBaseRef.current = 0;
+              serverTickTimeRef.current = performance.now();
 
               if (engineRef.current) {
                   engineRef.current.startNetworkGame(baseSeed, localCharacterId, payload.difficulty || 'NORMAL');
@@ -629,7 +664,10 @@ export default function App() {
           if (t === 'game.snapshot') {
               const snap = payload;
               const tick = snap?.tick ?? 0;
+              if (tick < lastServerTickRef.current) return;
               lastServerTickRef.current = tick;
+              serverTickBaseRef.current = tick;
+              serverTickTimeRef.current = performance.now();
               if (networkTickRef.current < tick) {
                   networkTickRef.current = tick;
               }
@@ -643,8 +681,18 @@ export default function App() {
               for (const p of players) {
                   if (p.id === localId) {
                       if (engineRef.current) {
-                          engineRef.current.player.x = p.x;
-                          engineRef.current.player.y = p.y;
+                          const dx = p.x - engineRef.current.player.x;
+                          const dy = p.y - engineRef.current.player.y;
+                          const dist = Math.hypot(dx, dy);
+                          if (dist > 35) {
+                              engineRef.current.player.x = p.x;
+                              engineRef.current.player.y = p.y;
+                          } else if (dist > 3) {
+                              engineRef.current.player.x += dx * 0.15;
+                              engineRef.current.player.y += dy * 0.15;
+                          } else {
+                              // Ignore tiny jitter to avoid rubber-banding
+                          }
                           engineRef.current.player.keys = p.keys ?? engineRef.current.player.keys;
                           engineRef.current.player.bombs = p.bombs ?? engineRef.current.player.bombs;
                       }
@@ -692,6 +740,8 @@ export default function App() {
       onlineInGameRef.current = false;
       prevRoomPosRef.current = null;
       hasSnapshotRef.current = false;
+      serverTickBaseRef.current = 0;
+      serverTickTimeRef.current = 0;
       setStatus(GameStatus.MENU);
       setShowSettings(false);
   };
