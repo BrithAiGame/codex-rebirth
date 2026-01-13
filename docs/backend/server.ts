@@ -533,6 +533,34 @@ function handleMessage(ws: WebSocket, raw: string) {
       });
       break;
     }
+    case "game.next_floor": {
+      const room = ensureRoom(msg.roomId, ws, ack);
+      if (!room) return;
+      const session = sessions.get(ws);
+      if (!session) return;
+      if (session.playerId !== room.hostId) {
+        error(ws, "NOT_HOST", "Only host can advance floor.", ack);
+        return;
+      }
+      broadcast(room, {
+        t: "game.next_floor",
+        roomId: room.id,
+        payload: msg.payload
+      });
+      break;
+    }
+    case "game.position": {
+      const room = ensureRoom(msg.roomId, ws, ack);
+      if (!room) return;
+      const session = sessions.get(ws);
+      if (!session) return;
+      broadcast(room, {
+        t: "game.position",
+        roomId: room.id,
+        payload: { ...msg.payload, playerId: session.playerId }
+      });
+      break;
+    }
     case "game.enter_room": {
       const room = ensureRoom(msg.roomId, ws, ack);
       if (!room) return;

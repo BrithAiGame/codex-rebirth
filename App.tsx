@@ -319,6 +319,7 @@ export default function App() {
   const [wsStatus, setWsStatus] = useState<'idle' | 'connecting' | 'open' | 'closed' | 'error'>('idle');
   const [isOnlineSession, setIsOnlineSession] = useState(false);
   const [deadListVersion, setDeadListVersion] = useState(0);
+  const lastFloorBroadcastRef = useRef<number | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const seqRef = useRef(1);
   const roomIdRef = useRef('');
@@ -676,7 +677,7 @@ export default function App() {
               hashHistoryRef.current.delete(oldest);
           }
           sendWs('game.hash', { tick, hash });
-      }, 1000);
+      }, 3000);
       return () => clearInterval(interval);
   }, [roomId, status]);
 
@@ -687,9 +688,37 @@ export default function App() {
           const sync = buildStateSync();
           if (!sync) return;
           sendWs('game.state_sync', sync);
+      }, 3000);
+      return () => clearInterval(interval);
+  }, [roomId, status]);
+
+  useEffect(() => {
+      if (!onlineInGameRef.current || status !== GameStatus.PLAYING) return;
+      const interval = setInterval(() => {
+          const ws = wsRef.current;
+          if (!ws || ws.readyState !== WebSocket.OPEN) return;
+          if (!engineRef.current) return;
+          const x = engineRef.current.player.x;
+          const y = engineRef.current.player.y;
+          ws.send(JSON.stringify({
+              t: 'game.position',
+              roomId: roomIdRef.current,
+              seq: seqRef.current++,
+              clientTime: Date.now(),
+              payload: { x, y }
+          }));
       }, 1000);
       return () => clearInterval(interval);
   }, [roomId, status]);
+
+  useEffect(() => {
+      if (!isOnlineSession || status !== GameStatus.PLAYING) return;
+      if (localPlayerIdRef.current !== onlineHostIdRef.current) return;
+      if (!gameStats?.floor || !gameStats.seed) return;
+      if (lastFloorBroadcastRef.current === gameStats.floor) return;
+      lastFloorBroadcastRef.current = gameStats.floor;
+      sendWs('game.next_floor', { floor: gameStats.floor, seed: gameStats.seed });
+  }, [gameStats?.floor, gameStats?.seed, isOnlineSession, status]);
 
   useEffect(() => {
       if (!onlineInGameRef.current || status !== GameStatus.PLAYING) return;
@@ -1394,6 +1423,30 @@ export default function App() {
 
           if (t === 'game.item_picked') {
               applyItemPickup(payload);
+          }
+
+          if (t === 'game.position') {
+              const playerId = payload?.playerId;
+              const x = payload?.x;
+              const y = payload?.y;
+              if (!playerId || playerId === localPlayerIdRef.current) return;
+              if (typeof x !== 'number' || typeof y !== 'number') return;
+              if (remoteSimStateRef.current[playerId]) {
+                  remoteSimStateRef.current[playerId].x = x;
+                  remoteSimStateRef.current[playerId].y = y;
+                  const remotes = Object.values(remoteSimStateRef.current).filter(p => p.id !== localPlayerIdRef.current);
+                  engineRef.current?.syncRemotePlayers(remotes);
+              }
+          }
+
+          if (t === 'game.next_floor') {
+              const floor = payload?.floor;
+              const seed = payload?.seed;
+              if (typeof floor === 'number' && typeof seed === 'number' && engineRef.current) {
+                  engineRef.current.baseSeed = seed;
+                  engineRef.current.loadFloor(floor);
+                  lastFloorBroadcastRef.current = floor;
+              }
           }
 
           if (t === 'game.revive') {

@@ -251,7 +251,7 @@ export class GameEngine {
     // 3. Initial Generation (If not visited)
     else if (!room.visited) {
         // Spawn Item if Item Room
-        if (room.type === 'ITEM') {
+        if (room.type === 'ITEM' && !room.itemCollected) {
             this.spawnItem(cx, cy, room.seed);
         }
         if (room.type === 'CHEST') {
