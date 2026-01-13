@@ -1146,7 +1146,7 @@ export default function App() {
       if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
           return wsRef.current;
       }
-      const ws = new WebSocket('ws://192.168.31.19:8001');
+      const ws = new WebSocket('wss://birth-relay.sid.mom');
       wsRef.current = ws;
       setWsStatus('connecting');
 
