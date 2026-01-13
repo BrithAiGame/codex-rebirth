@@ -139,6 +139,11 @@ export class GameEngine {
     };
   }
 
+  makeItemId(kind: string, seed: number, x: number, y: number, extra?: string) {
+      const suffix = extra ? `_${extra}` : '';
+      return `${kind}_${Math.floor(seed)}_${Math.round(x)}_${Math.round(y)}${suffix}`;
+  }
+
   // Calculate geometric room growth based on run seed
   calculateRoomCount(level: number): number {
       const rng = new SeededRNG(this.baseSeed);
@@ -501,9 +506,11 @@ export class GameEngine {
           : new SeededRNG(this.onlineMode ? fallbackSeed : Math.random() * 100000);
       const config = rng.weightedChoice(ITEMS);
       if (!config) return;
+      const itemSeed = seed !== undefined ? seed : fallbackSeed;
+      const id = this.onlineMode ? this.makeItemId('item', itemSeed, x, y, config.type) : uuid();
 
       const item: ItemEntity = {
-          id: uuid(),
+          id,
           type: EntityType.ITEM,
           x: x - CONSTANTS.ITEM_SIZE/2,
           y: y - CONSTANTS.ITEM_SIZE/2,
@@ -537,8 +544,11 @@ export class GameEngine {
           const config = rng.weightedChoice(ITEMS);
           if (!config) continue;
           const costHearts = 1 + Math.floor(rng.next() * 3);
+          const id = this.onlineMode
+              ? this.makeItemId('devil', seed || fallbackSeed, startX + i * spacing, y, `${choiceId}_${i}`)
+              : uuid();
           const item: ItemEntity = {
-              id: uuid(),
+              id,
               type: EntityType.ITEM,
               x: startX + i * spacing - CONSTANTS.ITEM_SIZE/2,
               y: y - CONSTANTS.ITEM_SIZE/2,
@@ -561,8 +571,9 @@ export class GameEngine {
   
   spawnPickup(x: number, y: number) {
       const config = DROPS[0]; 
+      const id = this.onlineMode ? this.makeItemId('pickup', this.currentRoom?.seed ?? this.baseSeed, x, y, config.type) : uuid();
       const pickup: ItemEntity = {
-          id: uuid(),
+          id,
           type: EntityType.ITEM,
           x: x - 8,
           y: y - 8,
@@ -581,8 +592,9 @@ export class GameEngine {
 
   spawnKey(x: number, y: number) {
       const config = DROPS.find(d => d.type === ItemType.KEY);
+      const id = this.onlineMode ? this.makeItemId('drop', this.currentRoom?.seed ?? this.baseSeed, x, y, 'KEY') : uuid();
       const pickup: ItemEntity = {
-          id: uuid(),
+          id,
           type: EntityType.ITEM,
           x: x - 8,
           y: y - 8,
@@ -601,8 +613,9 @@ export class GameEngine {
 
   spawnBombPickup(x: number, y: number) {
       const config = DROPS.find(d => d.type === ItemType.BOMB);
+      const id = this.onlineMode ? this.makeItemId('drop', this.currentRoom?.seed ?? this.baseSeed, x, y, 'BOMB') : uuid();
       const pickup: ItemEntity = {
-          id: uuid(),
+          id,
           type: EntityType.ITEM,
           x: x - 8,
           y: y - 8,
@@ -935,9 +948,10 @@ export class GameEngine {
         }
         
         // Spawn rewards
-        const clearRoll = this.onlineMode
-            ? new SeededRNG(this.currentRoom.seed + 5051).next()
-            : Math.random();
+        const shouldSpawnReward = !this.onlineMode || this.onlineIsHost;
+        const clearRoll = shouldSpawnReward
+            ? (this.onlineMode ? new SeededRNG(this.currentRoom.seed + 5051).next() : Math.random())
+            : 1;
         if (clearRoll < 0.10) {
              const cx = CONSTANTS.CANVAS_WIDTH / 2;
              const cy = CONSTANTS.CANVAS_HEIGHT / 2;
@@ -1830,23 +1844,26 @@ export class GameEngine {
           enemy.markedForDeletion = true;
           this.score += 10 + (enemy.enemyType === EnemyType.BOSS ? 500 : 0);
 
-          const baseSeed = (enemy.spawnSeed !== undefined ? enemy.spawnSeed : (this.currentRoom?.seed ?? this.baseSeed)) + Math.floor(enemy.x) * 37 + Math.floor(enemy.y) * 13;
-          const dropRng = this.onlineMode ? new SeededRNG(baseSeed) : null;
-          const pickupRoll = this.onlineMode ? dropRng!.next() : Math.random();
-          if (pickupRoll < 0.05) {
-              this.spawnPickup(enemy.x + enemy.w/2, enemy.y + enemy.h/2);
-          }
+          const shouldDrop = !this.onlineMode || this.onlineIsHost;
+          if (shouldDrop) {
+              const baseSeed = (enemy.spawnSeed !== undefined ? enemy.spawnSeed : (this.currentRoom?.seed ?? this.baseSeed)) + Math.floor(enemy.x) * 37 + Math.floor(enemy.y) * 13;
+              const dropRng = this.onlineMode ? new SeededRNG(baseSeed) : null;
+              const pickupRoll = this.onlineMode ? dropRng!.next() : Math.random();
+              if (pickupRoll < 0.05) {
+                  this.spawnPickup(enemy.x + enemy.w/2, enemy.y + enemy.h/2);
+              }
 
-          const keyDropChance = enemy.enemyType === EnemyType.BOSS ? 0.2 : 0.1;
-          const keyRoll = this.onlineMode ? dropRng!.next() : Math.random();
-          if (keyRoll < keyDropChance) {
-              this.spawnKey(enemy.x + enemy.w/2, enemy.y + enemy.h/2);
-          }
+              const keyDropChance = enemy.enemyType === EnemyType.BOSS ? 0.2 : 0.1;
+              const keyRoll = this.onlineMode ? dropRng!.next() : Math.random();
+              if (keyRoll < keyDropChance) {
+                  this.spawnKey(enemy.x + enemy.w/2, enemy.y + enemy.h/2);
+              }
 
-          const bombDropChance = enemy.enemyType === EnemyType.BOSS ? 0.2 : 0.1;
-          const bombRoll = this.onlineMode ? dropRng!.next() : Math.random();
-          if (bombRoll < bombDropChance) {
-              this.spawnBombPickup(enemy.x + enemy.w/2, enemy.y + enemy.h/2);
+              const bombDropChance = enemy.enemyType === EnemyType.BOSS ? 0.2 : 0.1;
+              const bombRoll = this.onlineMode ? dropRng!.next() : Math.random();
+              if (bombRoll < bombDropChance) {
+                  this.spawnBombPickup(enemy.x + enemy.w/2, enemy.y + enemy.h/2);
+              }
           }
       }
   }

@@ -320,6 +320,7 @@ export default function App() {
   const [isOnlineSession, setIsOnlineSession] = useState(false);
   const [deadListVersion, setDeadListVersion] = useState(0);
   const lastFloorBroadcastRef = useRef<number | null>(null);
+  const isOnlineSessionRef = useRef(false);
   const wsRef = useRef<WebSocket | null>(null);
   const seqRef = useRef(1);
   const roomIdRef = useRef('');
@@ -458,6 +459,9 @@ export default function App() {
   useEffect(() => { onlinePlayersRef.current = onlinePlayers; }, [onlinePlayers]);
   useEffect(() => { localPlayerIdRef.current = localPlayerId; }, [localPlayerId]);
   useEffect(() => { onlineHostIdRef.current = onlineHostId; }, [onlineHostId]);
+  useEffect(() => {
+      isOnlineSessionRef.current = isOnlineSession;
+  }, [isOnlineSession]);
 
   useEffect(() => {
     inputRef.current = new InputManager(settings.keyMap);
@@ -477,9 +481,10 @@ export default function App() {
   useEffect(() => {
       if (!engineRef.current) return;
       engineRef.current.onItemCollected = (item, room) => {
-          if (!isOnlineSession) return;
+          if (!isOnlineSessionRef.current) return;
           const roomPos = room ? { x: room.x, y: room.y } : undefined;
           sendWs('game.item_picked', {
+              itemId: item.id,
               x: item.x + item.w / 2,
               y: item.y + item.h / 2,
               itemType: item.itemType,
@@ -717,7 +722,7 @@ export default function App() {
       if (!gameStats?.floor || !gameStats.seed) return;
       if (lastFloorBroadcastRef.current === gameStats.floor) return;
       lastFloorBroadcastRef.current = gameStats.floor;
-      sendWs('game.next_floor', { floor: gameStats.floor, seed: gameStats.seed });
+      sendWs('game.next_floor', { floor: gameStats.floor, seed: gameStats.seed, room: gameStats.currentRoomPos });
   }, [gameStats?.floor, gameStats?.seed, isOnlineSession, status]);
 
   useEffect(() => {
@@ -903,6 +908,7 @@ export default function App() {
 
   const applyItemPickup = (payload: any) => {
       if (!engineRef.current || !payload) return;
+      const itemId = payload.itemId;
       const x = typeof payload.x === 'number' ? payload.x : null;
       const y = typeof payload.y === 'number' ? payload.y : null;
       const itemType = payload.itemType;
@@ -918,6 +924,7 @@ export default function App() {
       engineRef.current.entities = engineRef.current.entities.filter(e => {
           if (e.type !== EntityType.ITEM) return true;
           const item = e as any;
+          if (itemId && item.id === itemId) return false;
           if (choiceGroupId && item.choiceGroupId === choiceGroupId) return false;
           if (!choiceGroupId && itemType && item.itemType !== itemType) return true;
           if (x !== null && y !== null) {
@@ -931,6 +938,7 @@ export default function App() {
           roomRef.savedEntities = roomRef.savedEntities.filter(e => {
               if (e.type !== EntityType.ITEM) return true;
               const item = e as any;
+              if (itemId && item.id === itemId) return false;
               if (choiceGroupId && item.choiceGroupId === choiceGroupId) return false;
               if (!choiceGroupId && itemType && item.itemType !== itemType) return true;
               if (x !== null && y !== null) {
@@ -1306,6 +1314,7 @@ export default function App() {
 
               onlineInGameRef.current = true;
               setIsOnlineSession(true);
+              lastFloorBroadcastRef.current = null;
               prevRoomPosRef.current = null;
               networkTickRef.current = 0;
               lastServerTickRef.current = 0;
@@ -1324,10 +1333,10 @@ export default function App() {
               lastRoomCoordRef.current = null;
               lastRoomDirRef.current = null;
               localTickRef.current = 0;
-                  deadPlayersRef.current = new Set();
-                  localDeadRef.current = false;
-                  deathMarkersRef.current = new Set();
-                  bossReviveSentRef.current = null;
+              deadPlayersRef.current = new Set();
+              localDeadRef.current = false;
+              deathMarkersRef.current = new Set();
+              bossReviveSentRef.current = null;
 
               if (engineRef.current) {
                   engineRef.current.startNetworkGame(baseSeed, localCharacterId, payload.difficulty || 'NORMAL');
@@ -1364,6 +1373,7 @@ export default function App() {
                   deadPlayersRef.current = new Set();
                   deathMarkersRef.current = new Set();
                   bossReviveSentRef.current = null;
+                  lastFloorBroadcastRef.current = null;
                   engineRef.current.onlineIsHost = localPlayerIdRef.current === onlineHostIdRef.current;
                   setDeadListVersion(v => v + 1);
               }
@@ -1445,6 +1455,12 @@ export default function App() {
               if (typeof floor === 'number' && typeof seed === 'number' && engineRef.current) {
                   engineRef.current.baseSeed = seed;
                   engineRef.current.loadFloor(floor);
+                  if (payload?.room) {
+                      const target = engineRef.current.dungeon.find(r => r.x === payload.room.x && r.y === payload.room.y);
+                      if (target) {
+                          engineRef.current.enterRoom(target, null);
+                      }
+                  }
                   lastFloorBroadcastRef.current = floor;
               }
           }
@@ -1502,6 +1518,7 @@ export default function App() {
       sendWs('room.leave');
       onlineInGameRef.current = false;
       setIsOnlineSession(false);
+      lastFloorBroadcastRef.current = null;
       prevRoomPosRef.current = null;
       hasSnapshotRef.current = false;
       serverTickBaseRef.current = 0;
