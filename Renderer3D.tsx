@@ -588,15 +588,12 @@ const EntityGroup: React.FC<{ entity: Entity, engine: GameEngine }> = React.memo
 const ProjectileField: React.FC<{ engine: GameEngine }> = React.memo(({ engine }) => {
     const friendlyRef = useRef<THREE.InstancedMesh>(null);
     const enemyRef = useRef<THREE.InstancedMesh>(null);
-    const friendlyGlowRef = useRef<THREE.InstancedMesh>(null);
-    const enemyGlowRef = useRef<THREE.InstancedMesh>(null);
     const dummy = useMemo(() => new THREE.Object3D(), []);
-    const geometry = useMemo(() => new THREE.SphereGeometry(0.6, 12, 12), []);
-    const glowGeometry = useMemo(() => new THREE.SphereGeometry(1.0, 12, 12), []);
+    const geometry = useMemo(() => new THREE.SphereGeometry(0.5, 8, 8), []);
     const friendlyMat = useMemo(() => new THREE.MeshStandardMaterial({
         color: CONSTANTS.COLORS.PROJECTILE_FRIENDLY,
         emissive: new THREE.Color(CONSTANTS.COLORS.PROJECTILE_FRIENDLY),
-        emissiveIntensity: 1.4,
+        emissiveIntensity: 0.7,
         metalness: 0.2,
         roughness: 0.35,
         toneMapped: false
@@ -604,24 +601,10 @@ const ProjectileField: React.FC<{ engine: GameEngine }> = React.memo(({ engine }
     const enemyMat = useMemo(() => new THREE.MeshStandardMaterial({
         color: CONSTANTS.COLORS.PROJECTILE_ENEMY,
         emissive: new THREE.Color(CONSTANTS.COLORS.PROJECTILE_ENEMY),
-        emissiveIntensity: 1.2,
+        emissiveIntensity: 0.6,
         metalness: 0.2,
         roughness: 0.4,
         toneMapped: false
-    }), []);
-    const friendlyGlowMat = useMemo(() => new THREE.MeshBasicMaterial({
-        color: CONSTANTS.COLORS.PROJECTILE_FRIENDLY,
-        transparent: true,
-        opacity: 0.6,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false
-    }), []);
-    const enemyGlowMat = useMemo(() => new THREE.MeshBasicMaterial({
-        color: CONSTANTS.COLORS.PROJECTILE_ENEMY,
-        transparent: true,
-        opacity: 0.55,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false
     }), []);
 
     useFrame(() => {
@@ -657,18 +640,6 @@ const ProjectileField: React.FC<{ engine: GameEngine }> = React.memo(({ engine }
                 }
             }
 
-            const glowScale = Math.max(width * 2.2, 0.35);
-            dummy.scale.set(glowScale, glowScale, glowScale);
-            dummy.updateMatrix();
-            if (p.ownerId === 'player') {
-                if (friendlyCount - 1 < MAX_PROJECTILE_INSTANCES && friendlyGlowRef.current) {
-                    friendlyGlowRef.current.setMatrixAt(friendlyCount - 1, dummy.matrix);
-                }
-            } else {
-                if (enemyCount - 1 < MAX_PROJECTILE_INSTANCES && enemyGlowRef.current) {
-                    enemyGlowRef.current.setMatrixAt(enemyCount - 1, dummy.matrix);
-                }
-            }
         }
 
         if (friendlyRef.current) {
@@ -679,22 +650,12 @@ const ProjectileField: React.FC<{ engine: GameEngine }> = React.memo(({ engine }
             enemyRef.current.count = enemyCount;
             enemyRef.current.instanceMatrix.needsUpdate = true;
         }
-        if (friendlyGlowRef.current) {
-            friendlyGlowRef.current.count = friendlyCount;
-            friendlyGlowRef.current.instanceMatrix.needsUpdate = true;
-        }
-        if (enemyGlowRef.current) {
-            enemyGlowRef.current.count = enemyCount;
-            enemyGlowRef.current.instanceMatrix.needsUpdate = true;
-        }
     });
 
     return (
         <group>
             <instancedMesh ref={friendlyRef} args={[geometry, friendlyMat, MAX_PROJECTILE_INSTANCES]} frustumCulled={false} />
             <instancedMesh ref={enemyRef} args={[geometry, enemyMat, MAX_PROJECTILE_INSTANCES]} frustumCulled={false} />
-            <instancedMesh ref={friendlyGlowRef} args={[glowGeometry, friendlyGlowMat, MAX_PROJECTILE_INSTANCES]} frustumCulled={false} />
-            <instancedMesh ref={enemyGlowRef} args={[glowGeometry, enemyGlowMat, MAX_PROJECTILE_INSTANCES]} frustumCulled={false} />
         </group>
     );
 });
@@ -745,6 +706,32 @@ const DungeonMesh: React.FC<{ engine: GameEngine, assets: AssetLoader }> = React
             }
         });
     });
+
+    // Extra outer wall ring to fully cover beyond the room boundary
+    const outerOffsetX = (ROOM_WIDTH - 1) / 2 + 1;
+    const outerOffsetZ = (ROOM_HEIGHT - 1) / 2 + 1;
+    const doorGap = 1; // half-width in tiles for the opening
+    const skipForDoor = (x: number, z: number) => {
+        if (z === -outerOffsetZ && room.doors.UP && Math.abs(x) <= doorGap) return true;
+        if (z === outerOffsetZ && room.doors.DOWN && Math.abs(x) <= doorGap) return true;
+        if (x === -outerOffsetX && room.doors.LEFT && Math.abs(z) <= doorGap) return true;
+        if (x === outerOffsetX && room.doors.RIGHT && Math.abs(z) <= doorGap) return true;
+        return false;
+    };
+    for (let x = -outerOffsetX; x <= outerOffsetX; x += 1) {
+        for (let z = -outerOffsetZ; z <= outerOffsetZ; z += 1) {
+            const onOuterEdge = x === -outerOffsetX || x === outerOffsetX || z === -outerOffsetZ || z === outerOffsetZ;
+            if (!onOuterEdge) continue;
+            if (skipForDoor(x, z)) continue;
+            const key = `outer-${x}-${z}`;
+            wallMeshes.push(
+                <mesh key={key} position={[x, 0.5, z]} castShadow receiveShadow>
+                    <boxGeometry args={[1, 1, 1]} />
+                    <meshStandardMaterial map={wallTex || undefined} color="white" />
+                </mesh>
+            );
+        }
+    }
 
     // Doors
     const doorOpenT = room.doorAnim

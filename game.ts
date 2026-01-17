@@ -59,6 +59,8 @@ export class GameEngine {
   onlineIsHost: boolean = false;
   deadLocal: boolean = false;
   onlineRng: SeededRNG | null = null;
+  nextFloorPromptActive: boolean = false;
+  trapdoorSuppress: boolean = false;
 
   // Callback to sync React UI
   onUiUpdate: (stats: any) => void;
@@ -907,8 +909,21 @@ export class GameEngine {
           nearbyItem,
           boss: bossData,
           restartTimer: this.restartTimer,
-          inventory: [...this.player.inventory] // Fix: Include inventory in UI state
+          inventory: [...this.player.inventory], // Fix: Include inventory in UI state
+          nextFloorPrompt: this.nextFloorPromptActive
       };
+  }
+
+  confirmNextFloor(accept: boolean) {
+      if (!this.nextFloorPromptActive) return;
+      if (accept) {
+          this.nextFloorPromptActive = false;
+          this.trapdoorSuppress = false;
+          this.loadFloor(this.floorLevel + 1);
+          return;
+      }
+      this.nextFloorPromptActive = false;
+      this.trapdoorSuppress = true;
   }
 
   update(input: { move: {x:number, y:number}, shoot: {x:number, y:number} | null, restart?: boolean, pause?: boolean, bomb?: boolean }, dt: number = 1 / 60) {
@@ -1047,6 +1062,7 @@ export class GameEngine {
 
     this.resolveEnemyPhysics(enemies);
 
+    let isOnTrapdoor = false;
     this.entities.forEach(e => {
         if (e.markedForDeletion) return;
 
@@ -1080,8 +1096,11 @@ export class GameEngine {
             }
         } else if (e.type === EntityType.TRAPDOOR) {
             if (checkAABB(this.player, e)) {
+                isOnTrapdoor = true;
+                if (this.nextFloorPromptActive || this.trapdoorSuppress) return;
                 if (this.onlineMode && !this.onlineIsHost) return;
-                this.loadFloor(this.floorLevel + 1);
+                this.nextFloorPromptActive = true;
+                this.trapdoorSuppress = true;
             }
         }
         
@@ -1092,6 +1111,9 @@ export class GameEngine {
     });
 
     this.entities = this.entities.filter(e => !e.markedForDeletion);
+    if (this.trapdoorSuppress && !isOnTrapdoor) {
+        this.trapdoorSuppress = false;
+    }
     this.updateRemotePlayers(dt);
     this.onUiUpdate(this.getUiState());
   }
@@ -1136,6 +1158,9 @@ export class GameEngine {
       const damage = stats.damage;
       const knockback = isPlayer ? (owner as PlayerEntity).stats.knockback : 0;
       let baseSize = CONSTANTS.PROJECTILE_SIZE;
+      if (!isPlayer) {
+          baseSize *= 2.1;
+      }
       if (isPlayer) {
           const dmgFactor = Math.max(1, damage / 3.5);
           baseSize = baseSize * dmgFactor;

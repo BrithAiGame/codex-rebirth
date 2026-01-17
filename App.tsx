@@ -202,9 +202,10 @@ const GameLoop: React.FC<{ engine: GameEngine, input: React.MutableRefObject<Inp
                         const bomb = input.current.isBombPressed();
                         const restart = !isOnline ? restartPressed : false;
                         const isSpectating = isOnline && localDeadRef.current;
-                        const move = isSpectating ? { x: 0, y: 0 } : rawMove;
-                        const shoot = isSpectating ? null : rawShoot;
-                        const bombSafe = isSpectating ? false : bomb;
+                        const hasFloorPrompt = engine.nextFloorPromptActive;
+                        const move = (isSpectating || hasFloorPrompt) ? { x: 0, y: 0 } : rawMove;
+                        const shoot = (isSpectating || hasFloorPrompt) ? null : rawShoot;
+                        const bombSafe = (isSpectating || hasFloorPrompt) ? false : bomb;
                         const shotMeta = shoot ? {
                             damage: engine.player.stats.damage,
                             fireRate: engine.player.stats.fireRate,
@@ -305,6 +306,7 @@ export default function App() {
   const [settingsSelection, setSettingsSelection] = useState(0);
   const [selectedCharIndex, setSelectedCharIndex] = useState(0);
   const [difficultyIndex, setDifficultyIndex] = useState(0);
+  const [nextFloorSelection, setNextFloorSelection] = useState(0);
   const [floorTransition, setFloorTransition] = useState<{ phase: 'in' | 'out'; key: number } | null>(null);
   const floorRef = useRef<number | null>(null);
   const [onlineView, setOnlineView] = useState<'menu' | 'create' | 'join' | 'lobby'>('menu');
@@ -546,6 +548,12 @@ export default function App() {
           onlineInGameRef.current = false;
       }
   }, [status]);
+
+  useEffect(() => {
+      if (gameStats?.nextFloorPrompt) {
+          setNextFloorSelection(0);
+      }
+  }, [gameStats?.nextFloorPrompt]);
 
   useEffect(() => {
       if (!isOnlineSession || status !== GameStatus.GAME_OVER) return;
@@ -1588,6 +1596,24 @@ export default function App() {
            const isEnter = e.code === 'Enter' || e.code === 'Space' || e.code === 'NumpadEnter';
            const isEsc = e.code === 'Escape';
 
+           if (status === GameStatus.PLAYING && gameStats?.nextFloorPrompt) {
+               if (['ArrowUp', 'ArrowLeft'].includes(e.code)) setNextFloorSelection(0);
+               if (['ArrowDown', 'ArrowRight'].includes(e.code)) setNextFloorSelection(1);
+               if (isEnter) {
+                   if (engineRef.current) {
+                       engineRef.current.confirmNextFloor(nextFloorSelection === 0);
+                   }
+                   setNextFloorSelection(0);
+               }
+               if (isEsc) {
+                   if (engineRef.current) {
+                       engineRef.current.confirmNextFloor(false);
+                   }
+                   setNextFloorSelection(0);
+               }
+               return;
+           }
+
            // Global Toggle
            if (e.code === settings.keyMap.toggleFullscreen) {
                toggleFullScreen();
@@ -1869,6 +1895,19 @@ export default function App() {
                   {isOnlineSession && localDeadRef.current && (
                       <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none">
                           <div className="bg-black/70 border border-gray-700 px-6 py-3 text-2xl font-black tracking-widest text-gray-200">SPECTATING</div>
+                      </div>
+                  )}
+                  {isInGame && gameStats?.nextFloorPrompt && (
+                      <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60">
+                          <div className="bg-black/80 border border-gray-600 px-8 py-6 rounded-lg text-center min-w-[260px]">
+                              <div className="text-sm text-gray-400 tracking-widest mb-2">NEXT FLOOR</div>
+                              <div className="text-2xl font-black text-white mb-6">Proceed?</div>
+                              <div className="flex items-center justify-center gap-4">
+                                  <div className={`px-4 py-2 border text-sm font-bold ${nextFloorSelection === 0 ? 'border-white text-white bg-white/10' : 'border-gray-600 text-gray-400'}`}>CONFIRM</div>
+                                  <div className={`px-4 py-2 border text-sm font-bold ${nextFloorSelection === 1 ? 'border-white text-white bg-white/10' : 'border-gray-600 text-gray-400'}`}>CANCEL</div>
+                              </div>
+                              <div className="text-[10px] text-gray-500 mt-4">Arrow Keys + Enter</div>
+                          </div>
                       </div>
                   )}
                   <div 

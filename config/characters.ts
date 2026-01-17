@@ -27,7 +27,7 @@ export const CHARACTERS: CharacterConfig[] = [
       shotSpeed: 2.52,
       range: 400,
       shotSpread: 1,
-      bulletScale: 1,
+      bulletScale: 0.6,
       knockback: 1
     }
   },
@@ -46,7 +46,7 @@ export const CHARACTERS: CharacterConfig[] = [
       shotSpeed: 2.0,
       range: 350,
       shotSpread: 1,
-      bulletScale: 1.3,
+      bulletScale: 0.6,
       knockback: 2.0 // High Knockback
     }
   },
@@ -65,7 +65,7 @@ export const CHARACTERS: CharacterConfig[] = [
       shotSpeed: 3.5, // Fast bullets
       range: 300, // Short range
       shotSpread: 1,
-      bulletScale: 0.8,
+      bulletScale: 0.6,
       knockback: 0.5
     }
   },
@@ -84,7 +84,7 @@ export const CHARACTERS: CharacterConfig[] = [
       shotSpeed: 2.2,
       range: 350,
       shotSpread: 3, // Triple Shot!
-      bulletScale: 1.0,
+      bulletScale: 0.6,
       knockback: 1.0
     }
   },
@@ -103,7 +103,7 @@ export const CHARACTERS: CharacterConfig[] = [
       shotSpeed: 5.0, // Instant
       range: 800, // Sniper range
       shotSpread: 1,
-      bulletScale: 0.8,
+      bulletScale: 0.6,
       knockback: 1.5
     }
   },
@@ -122,7 +122,7 @@ export const CHARACTERS: CharacterConfig[] = [
       shotSpeed: 2.5,
       range: 300,
       shotSpread: 4, // ...but Quad Shot
-      bulletScale: 0.7,
+      bulletScale: 0.6,
       knockback: 0.2
     }
   },
@@ -141,7 +141,7 @@ export const CHARACTERS: CharacterConfig[] = [
       shotSpeed: 3.0,
       range: 500,
       shotSpread: 1,
-      bulletScale: 1.2,
+      bulletScale: 0.6,
       knockback: 3.0 // Massive push
     }
   }
