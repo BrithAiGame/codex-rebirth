@@ -343,6 +343,17 @@ const EntityGroup: React.FC<{ entity: Entity, engine: GameEngine }> = React.memo
     const height = entity.h / TILE_SIZE;
 
     const { spriteMatrix, palette } = useMemo(() => getEntityAssetData(entity, engine), [entity.type, (entity as any).itemType, (entity as any).enemyType, engine.characterId]);
+    const isPlayerEntity = entity.type === EntityType.PLAYER || entity.type === EntityType.REMOTE_PLAYER;
+    const characterId = entity.type === EntityType.PLAYER ? engine.characterId : (entity as RemotePlayerEntity).characterId;
+    const playerStyle = {
+        alpha: { body: '#14b8a6', armor: '#0f766e', accent: '#99f6e4', core: '#38bdf8' },
+        titan: { body: '#166534', armor: '#14532d', accent: '#86efac', core: '#22c55e' },
+        strider: { body: '#f59e0b', armor: '#a16207', accent: '#fef08a', core: '#f97316' },
+        blaster: { body: '#a855f7', armor: '#7e22ce', accent: '#e9d5ff', core: '#c084fc' },
+        sniper: { body: '#3b82f6', armor: '#1e40af', accent: '#93c5fd', core: '#60a5fa' },
+        swarm: { body: '#ef4444', armor: '#991b1b', accent: '#fecaca', core: '#fb7185' },
+        void: { body: '#1f2937', armor: '#0f172a', accent: '#64748b', core: '#94a3b8' }
+    }[characterId] || { body: '#14b8a6', armor: '#0f766e', accent: '#99f6e4', core: '#38bdf8' };
 
     useFrame((state) => {
         if (groupRef.current) {
@@ -519,6 +530,19 @@ const EntityGroup: React.FC<{ entity: Entity, engine: GameEngine }> = React.memo
     const isFlash = (entity.flashTimer && entity.flashTimer > 0) || 
                     (entity.type === EntityType.PLAYER && (entity as PlayerEntity).invincibleTimer > 0 && Math.floor((entity as PlayerEntity).invincibleTimer / 4) % 2 === 0);
 
+    if (isPlayerEntity) {
+        return (
+            <group ref={groupRef}>
+                <VoxelMesh 
+                    spriteMatrix={spriteMatrix} 
+                    colors={palette} 
+                    scaleFactor={width} 
+                    flash={!!isFlash} 
+                />
+            </group>
+        );
+    }
+
     if (entity.type === EntityType.ITEM) {
         const item = entity as ItemEntity;
         const cost = item.costHearts || 0;
@@ -567,12 +591,12 @@ const ProjectileField: React.FC<{ engine: GameEngine }> = React.memo(({ engine }
     const friendlyGlowRef = useRef<THREE.InstancedMesh>(null);
     const enemyGlowRef = useRef<THREE.InstancedMesh>(null);
     const dummy = useMemo(() => new THREE.Object3D(), []);
-    const geometry = useMemo(() => new THREE.SphereGeometry(0.5, 10, 10), []);
-    const glowGeometry = useMemo(() => new THREE.SphereGeometry(0.7, 10, 10), []);
+    const geometry = useMemo(() => new THREE.SphereGeometry(0.6, 12, 12), []);
+    const glowGeometry = useMemo(() => new THREE.SphereGeometry(1.0, 12, 12), []);
     const friendlyMat = useMemo(() => new THREE.MeshStandardMaterial({
         color: CONSTANTS.COLORS.PROJECTILE_FRIENDLY,
         emissive: new THREE.Color(CONSTANTS.COLORS.PROJECTILE_FRIENDLY),
-        emissiveIntensity: 1.0,
+        emissiveIntensity: 1.4,
         metalness: 0.2,
         roughness: 0.35,
         toneMapped: false
@@ -580,7 +604,7 @@ const ProjectileField: React.FC<{ engine: GameEngine }> = React.memo(({ engine }
     const enemyMat = useMemo(() => new THREE.MeshStandardMaterial({
         color: CONSTANTS.COLORS.PROJECTILE_ENEMY,
         emissive: new THREE.Color(CONSTANTS.COLORS.PROJECTILE_ENEMY),
-        emissiveIntensity: 0.9,
+        emissiveIntensity: 1.2,
         metalness: 0.2,
         roughness: 0.4,
         toneMapped: false
@@ -588,14 +612,14 @@ const ProjectileField: React.FC<{ engine: GameEngine }> = React.memo(({ engine }
     const friendlyGlowMat = useMemo(() => new THREE.MeshBasicMaterial({
         color: CONSTANTS.COLORS.PROJECTILE_FRIENDLY,
         transparent: true,
-        opacity: 0.5,
+        opacity: 0.6,
         blending: THREE.AdditiveBlending,
         depthWrite: false
     }), []);
     const enemyGlowMat = useMemo(() => new THREE.MeshBasicMaterial({
         color: CONSTANTS.COLORS.PROJECTILE_ENEMY,
         transparent: true,
-        opacity: 0.45,
+        opacity: 0.55,
         blending: THREE.AdditiveBlending,
         depthWrite: false
     }), []);
@@ -633,7 +657,7 @@ const ProjectileField: React.FC<{ engine: GameEngine }> = React.memo(({ engine }
                 }
             }
 
-            const glowScale = width * 1.6;
+            const glowScale = Math.max(width * 2.2, 0.35);
             dummy.scale.set(glowScale, glowScale, glowScale);
             dummy.updateMatrix();
             if (p.ownerId === 'player') {
@@ -667,10 +691,10 @@ const ProjectileField: React.FC<{ engine: GameEngine }> = React.memo(({ engine }
 
     return (
         <group>
-            <instancedMesh ref={friendlyRef} args={[geometry, friendlyMat, MAX_PROJECTILE_INSTANCES]} />
-            <instancedMesh ref={enemyRef} args={[geometry, enemyMat, MAX_PROJECTILE_INSTANCES]} />
-            <instancedMesh ref={friendlyGlowRef} args={[glowGeometry, friendlyGlowMat, MAX_PROJECTILE_INSTANCES]} />
-            <instancedMesh ref={enemyGlowRef} args={[glowGeometry, enemyGlowMat, MAX_PROJECTILE_INSTANCES]} />
+            <instancedMesh ref={friendlyRef} args={[geometry, friendlyMat, MAX_PROJECTILE_INSTANCES]} frustumCulled={false} />
+            <instancedMesh ref={enemyRef} args={[geometry, enemyMat, MAX_PROJECTILE_INSTANCES]} frustumCulled={false} />
+            <instancedMesh ref={friendlyGlowRef} args={[glowGeometry, friendlyGlowMat, MAX_PROJECTILE_INSTANCES]} frustumCulled={false} />
+            <instancedMesh ref={enemyGlowRef} args={[glowGeometry, enemyGlowMat, MAX_PROJECTILE_INSTANCES]} frustumCulled={false} />
         </group>
     );
 });
