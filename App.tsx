@@ -917,8 +917,11 @@ export default function App() {
       const roomRef = roomPos
           ? engineRef.current.dungeon.find(r => r.x === roomPos.x && r.y === roomPos.y)
           : engineRef.current.currentRoom;
-      if (roomRef && roomRef.type === 'ITEM') {
-          roomRef.itemCollected = true;
+      if (roomRef) {
+          roomRef.visited = true;
+          if (roomRef.type === 'ITEM') {
+              roomRef.itemCollected = true;
+          }
       }
       const threshold = CONSTANTS.ITEM_SIZE * 0.75;
       engineRef.current.entities = engineRef.current.entities.filter(e => {
@@ -1314,6 +1317,7 @@ export default function App() {
 
               onlineInGameRef.current = true;
               setIsOnlineSession(true);
+              isOnlineSessionRef.current = true;
               lastFloorBroadcastRef.current = null;
               prevRoomPosRef.current = null;
               networkTickRef.current = 0;
@@ -1368,6 +1372,7 @@ export default function App() {
               const characterId = onlinePlayersRef.current[localId]?.characterId || 'alpha';
               if (typeof seed === 'number' && engineRef.current) {
                   engineRef.current.startNetworkGame(seed, characterId, 'NORMAL');
+                  isOnlineSessionRef.current = true;
                   localDeadRef.current = false;
                   engineRef.current.deadLocal = false;
                   deadPlayersRef.current = new Set();
@@ -1518,6 +1523,7 @@ export default function App() {
       sendWs('room.leave');
       onlineInGameRef.current = false;
       setIsOnlineSession(false);
+      isOnlineSessionRef.current = false;
       lastFloorBroadcastRef.current = null;
       prevRoomPosRef.current = null;
       hasSnapshotRef.current = false;
@@ -1793,7 +1799,7 @@ export default function App() {
           : [];
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-[#050505] text-white select-none overflow-hidden" style={{ fontFamily: "'GameFontZh', monospace" }}>
+    <div className="flex flex-col h-screen w-screen bg-[#050505] text-white select-none overflow-hidden">
       
       {/* HEADER */}
       <header className="flex-none h-16 bg-neutral-900 border-b border-gray-800 flex items-center justify-between px-4 z-50 shadow-md">
@@ -1930,7 +1936,7 @@ export default function App() {
                         {/* MAIN MENU */}
                         {status === GameStatus.MENU && !showSettings && (
                             <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm">
-                                <h1 className="text-6xl md:text-8xl font-black text-transparent bg-clip-text bg-gradient-to-b from-cyan-400 to-blue-900 mb-8 tracking-tighter drop-shadow-2xl">{t('GAME_TITLE')}</h1>
+                                <h1 className="text-6xl md:text-8xl font-black text-transparent bg-clip-text bg-gradient-to-b from-cyan-400 to-blue-900 mb-8 tracking-tighter drop-shadow-2xl" style={{ fontFamily: "'GameFontZh', monospace" }}>{t('GAME_TITLE')}</h1>
                                 <button className={getBtnClass(0)} onClick={() => setStatus(GameStatus.CHARACTER_SELECT)} onMouseEnter={() => setMenuSelection(0)}>{t('START_RUN')}</button>
                                 <button className={getBtnClass(1)} onClick={() => { setStatus(GameStatus.ONLINE); setOnlineView('menu'); setMenuSelection(0); connectWs(); }} onMouseEnter={() => setMenuSelection(1)}>联机游戏</button>
                                 <button className={getBtnClass(2)} onClick={() => setShowSettings(true)} onMouseEnter={() => setMenuSelection(2)}>{t('SETTINGS')}</button>
