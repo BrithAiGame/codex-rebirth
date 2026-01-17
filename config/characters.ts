@@ -21,9 +21,9 @@ export const CHARACTERS: CharacterConfig[] = [
     baseStats: {
       hp: 6, // 3 Hearts
       maxHp: 6,
-      speed: 2.88,
+      speed: 4.32,
       damage: 3.5,
-      fireRate: 55,
+      fireRate: 28,
       shotSpeed: 2.52,
       range: 400,
       shotSpread: 1,
@@ -40,9 +40,9 @@ export const CHARACTERS: CharacterConfig[] = [
     baseStats: {
       hp: 10, // 5 Hearts
       maxHp: 10,
-      speed: 2.0, // Slow
+      speed: 3.0, // Slow
       damage: 4.5, // High Damage
-      fireRate: 70, // Slow Fire
+      fireRate: 35, // Slow Fire
       shotSpeed: 2.0,
       range: 350,
       shotSpread: 1,
@@ -59,9 +59,9 @@ export const CHARACTERS: CharacterConfig[] = [
     baseStats: {
       hp: 4, // 2 Hearts
       maxHp: 4,
-      speed: 4.0, // Very Fast
+      speed: 6.0, // Very Fast
       damage: 2.5, // Low Damage
-      fireRate: 30, // Fast Fire
+      fireRate: 15, // Fast Fire
       shotSpeed: 3.5, // Fast bullets
       range: 300, // Short range
       shotSpread: 1,
@@ -78,9 +78,9 @@ export const CHARACTERS: CharacterConfig[] = [
     baseStats: {
       hp: 6,
       maxHp: 6,
-      speed: 2.6,
+      speed: 3.9,
       damage: 3.0,
-      fireRate: 90, // Very Slow
+      fireRate: 45, // Very Slow
       shotSpeed: 2.2,
       range: 350,
       shotSpread: 3, // Triple Shot!
@@ -97,9 +97,9 @@ export const CHARACTERS: CharacterConfig[] = [
     baseStats: {
       hp: 4,
       maxHp: 4,
-      speed: 2.8,
+      speed: 4.2,
       damage: 6.0, // Huge Damage
-      fireRate: 80, // Slow
+      fireRate: 40, // Slow
       shotSpeed: 5.0, // Instant
       range: 800, // Sniper range
       shotSpread: 1,
@@ -116,9 +116,9 @@ export const CHARACTERS: CharacterConfig[] = [
     baseStats: {
       hp: 6,
       maxHp: 6,
-      speed: 3.0,
+      speed: 4.5,
       damage: 2.0, // Low Damage
-      fireRate: 100, // Slow cooldown...
+      fireRate: 50, // Slow cooldown...
       shotSpeed: 2.5,
       range: 300,
       shotSpread: 4, // ...but Quad Shot
@@ -135,9 +135,9 @@ export const CHARACTERS: CharacterConfig[] = [
     baseStats: {
       hp: 2, // 1 Heart (Glass Cannon)
       maxHp: 2,
-      speed: 3.2,
+      speed: 4.8,
       damage: 5.0,
-      fireRate: 40,
+      fireRate: 20,
       shotSpeed: 3.0,
       range: 500,
       shotSpread: 1,

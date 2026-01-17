@@ -564,10 +564,41 @@ const EntityGroup: React.FC<{ entity: Entity, engine: GameEngine }> = React.memo
 const ProjectileField: React.FC<{ engine: GameEngine }> = React.memo(({ engine }) => {
     const friendlyRef = useRef<THREE.InstancedMesh>(null);
     const enemyRef = useRef<THREE.InstancedMesh>(null);
+    const friendlyGlowRef = useRef<THREE.InstancedMesh>(null);
+    const enemyGlowRef = useRef<THREE.InstancedMesh>(null);
     const dummy = useMemo(() => new THREE.Object3D(), []);
-    const geometry = useMemo(() => new THREE.SphereGeometry(0.5, 6, 6), []);
-    const friendlyMat = useMemo(() => new THREE.MeshBasicMaterial({ color: CONSTANTS.COLORS.PROJECTILE_FRIENDLY, toneMapped: false }), []);
-    const enemyMat = useMemo(() => new THREE.MeshBasicMaterial({ color: CONSTANTS.COLORS.PROJECTILE_ENEMY, toneMapped: false }), []);
+    const geometry = useMemo(() => new THREE.SphereGeometry(0.5, 10, 10), []);
+    const glowGeometry = useMemo(() => new THREE.SphereGeometry(0.7, 10, 10), []);
+    const friendlyMat = useMemo(() => new THREE.MeshStandardMaterial({
+        color: CONSTANTS.COLORS.PROJECTILE_FRIENDLY,
+        emissive: new THREE.Color(CONSTANTS.COLORS.PROJECTILE_FRIENDLY),
+        emissiveIntensity: 1.0,
+        metalness: 0.2,
+        roughness: 0.35,
+        toneMapped: false
+    }), []);
+    const enemyMat = useMemo(() => new THREE.MeshStandardMaterial({
+        color: CONSTANTS.COLORS.PROJECTILE_ENEMY,
+        emissive: new THREE.Color(CONSTANTS.COLORS.PROJECTILE_ENEMY),
+        emissiveIntensity: 0.9,
+        metalness: 0.2,
+        roughness: 0.4,
+        toneMapped: false
+    }), []);
+    const friendlyGlowMat = useMemo(() => new THREE.MeshBasicMaterial({
+        color: CONSTANTS.COLORS.PROJECTILE_FRIENDLY,
+        transparent: true,
+        opacity: 0.5,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    }), []);
+    const enemyGlowMat = useMemo(() => new THREE.MeshBasicMaterial({
+        color: CONSTANTS.COLORS.PROJECTILE_ENEMY,
+        transparent: true,
+        opacity: 0.45,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    }), []);
 
     useFrame(() => {
         let friendlyCount = 0;
@@ -587,7 +618,7 @@ const ProjectileField: React.FC<{ engine: GameEngine }> = React.memo(({ engine }
             if (p.visualZ) y += p.visualZ / TILE_SIZE;
 
             dummy.position.set(x, y, z);
-            dummy.scale.set(width, width, width);
+            dummy.scale.set(width, width, width * 1.1);
             dummy.updateMatrix();
 
             if (p.ownerId === 'player') {
@@ -601,6 +632,19 @@ const ProjectileField: React.FC<{ engine: GameEngine }> = React.memo(({ engine }
                     enemyCount++;
                 }
             }
+
+            const glowScale = width * 1.6;
+            dummy.scale.set(glowScale, glowScale, glowScale);
+            dummy.updateMatrix();
+            if (p.ownerId === 'player') {
+                if (friendlyCount - 1 < MAX_PROJECTILE_INSTANCES && friendlyGlowRef.current) {
+                    friendlyGlowRef.current.setMatrixAt(friendlyCount - 1, dummy.matrix);
+                }
+            } else {
+                if (enemyCount - 1 < MAX_PROJECTILE_INSTANCES && enemyGlowRef.current) {
+                    enemyGlowRef.current.setMatrixAt(enemyCount - 1, dummy.matrix);
+                }
+            }
         }
 
         if (friendlyRef.current) {
@@ -611,12 +655,22 @@ const ProjectileField: React.FC<{ engine: GameEngine }> = React.memo(({ engine }
             enemyRef.current.count = enemyCount;
             enemyRef.current.instanceMatrix.needsUpdate = true;
         }
+        if (friendlyGlowRef.current) {
+            friendlyGlowRef.current.count = friendlyCount;
+            friendlyGlowRef.current.instanceMatrix.needsUpdate = true;
+        }
+        if (enemyGlowRef.current) {
+            enemyGlowRef.current.count = enemyCount;
+            enemyGlowRef.current.instanceMatrix.needsUpdate = true;
+        }
     });
 
     return (
         <group>
             <instancedMesh ref={friendlyRef} args={[geometry, friendlyMat, MAX_PROJECTILE_INSTANCES]} />
             <instancedMesh ref={enemyRef} args={[geometry, enemyMat, MAX_PROJECTILE_INSTANCES]} />
+            <instancedMesh ref={friendlyGlowRef} args={[glowGeometry, friendlyGlowMat, MAX_PROJECTILE_INSTANCES]} />
+            <instancedMesh ref={enemyGlowRef} args={[glowGeometry, enemyGlowMat, MAX_PROJECTILE_INSTANCES]} />
         </group>
     );
 });
@@ -680,8 +734,8 @@ const DungeonMesh: React.FC<{ engine: GameEngine, assets: AssetLoader }> = React
 
     const createShutterDoor = (x: number, z: number, rotY: number, key: string, neighborType: Room['type'] | null) => {
         const doorWidth = 3;
-        const doorHeight = 1;
-        const frameDepth = 0.18;
+        const doorHeight = 1.2;
+        const frameDepth = 0.2;
         const frameThickness = 0.1;
         const panelWidth = doorWidth / 2;
         const panelHeight = doorHeight - frameThickness;
@@ -698,6 +752,9 @@ const DungeonMesh: React.FC<{ engine: GameEngine, assets: AssetLoader }> = React
             indicatorColor = '#fbbf24';
         }
 
+        const panelColor = doorOpenT > 0.7 ? CONSTANTS.PALETTE.DOOR_OPEN : CONSTANTS.PALETTE.DOOR_LOCKED;
+        const handleGlow = doorOpenT > 0.7 ? '#22c55e' : '#ef4444';
+
         return (
             <group key={`door-${key}`} position={[x, 0.5, z]} rotation={[0, rotY, 0]}>
                 <mesh castShadow receiveShadow position={[0, (doorHeight / 2) - (frameThickness / 2), 0]}>
@@ -712,19 +769,27 @@ const DungeonMesh: React.FC<{ engine: GameEngine, assets: AssetLoader }> = React
                     <boxGeometry args={[frameThickness, doorHeight, frameDepth]} />
                     <meshStandardMaterial color={CONSTANTS.PALETTE.DOOR_FRAME} />
                 </mesh>
+                <mesh castShadow receiveShadow position={[0, -(doorHeight / 2) + (frameThickness / 2), 0]}>
+                    <boxGeometry args={[doorWidth + frameThickness * 2, frameThickness, frameDepth]} />
+                    <meshStandardMaterial color={CONSTANTS.PALETTE.DOOR_FRAME} />
+                </mesh>
 
                 <mesh castShadow receiveShadow position={[-panelShift, 0, 0]}>
                     <boxGeometry args={[panelWidth, panelHeight, 0.08]} />
-                    <meshStandardMaterial color={CONSTANTS.PALETTE.DOOR_LOCKED} />
+                    <meshStandardMaterial color={panelColor} emissive={panelColor} emissiveIntensity={0.25} />
                 </mesh>
                 <mesh castShadow receiveShadow position={[panelShift, 0, 0]}>
                     <boxGeometry args={[panelWidth, panelHeight, 0.08]} />
-                    <meshStandardMaterial color={CONSTANTS.PALETTE.DOOR_LOCKED} />
+                    <meshStandardMaterial color={panelColor} emissive={panelColor} emissiveIntensity={0.25} />
                 </mesh>
 
-                <mesh position={[0, (doorHeight / 2) - 0.18, frameDepth / 2 + 0.04]}>
-                    <boxGeometry args={[0.22, 0.12, 0.06]} />
-                    <meshStandardMaterial color={indicatorColor} emissive={indicatorColor} emissiveIntensity={0.8} />
+                <mesh position={[0, (doorHeight / 2) - 0.2, frameDepth / 2 + 0.04]}>
+                    <boxGeometry args={[0.24, 0.12, 0.06]} />
+                    <meshStandardMaterial color={indicatorColor} emissive={indicatorColor} emissiveIntensity={0.9} />
+                </mesh>
+                <mesh position={[0, -0.05, frameDepth / 2 + 0.03]}>
+                    <boxGeometry args={[0.18, 0.18, 0.05]} />
+                    <meshStandardMaterial color={handleGlow} emissive={handleGlow} emissiveIntensity={0.5} />
                 </mesh>
             </group>
         );

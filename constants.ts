@@ -11,7 +11,7 @@ export const CONSTANTS = {
   
   PLAYER_SIZE: 32,
   ENEMY_SIZE: 32,
-  PROJECTILE_SIZE: 16, // Increased slightly for visibility
+  PROJECTILE_SIZE: 9.6, // Increased to 300% of current size
   ITEM_SIZE: 24,
 
   FPS: 60,
