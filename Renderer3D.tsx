@@ -732,7 +732,34 @@ const DungeonMesh: React.FC<{ engine: GameEngine, assets: AssetLoader }> = React
         return nextRoom ? nextRoom.type : null;
     };
 
+    const createHiddenHole = (x: number, z: number, rotY: number, key: string) => {
+        const holeDepth = 0.12;
+        return (
+            <group key={`hidden-hole-${key}`} position={[x, 0.5, z]} rotation={[0, rotY, 0]}>
+                <mesh position={[0, 0, 0]} castShadow receiveShadow>
+                    <boxGeometry args={[1.2, 0.8, holeDepth]} />
+                    <meshStandardMaterial color="#0b1b3f" emissive="#0b1b3f" emissiveIntensity={0.25} />
+                </mesh>
+                <mesh position={[-0.55, 0.25, 0.02]} castShadow receiveShadow>
+                    <boxGeometry args={[0.3, 0.35, 0.16]} />
+                    <meshStandardMaterial color="#1f2937" />
+                </mesh>
+                <mesh position={[0.4, -0.15, 0.03]} castShadow receiveShadow>
+                    <boxGeometry args={[0.35, 0.28, 0.18]} />
+                    <meshStandardMaterial color="#111827" />
+                </mesh>
+                <mesh position={[-0.1, -0.32, 0.04]} castShadow receiveShadow>
+                    <boxGeometry args={[0.25, 0.25, 0.14]} />
+                    <meshStandardMaterial color="#0f172a" />
+                </mesh>
+            </group>
+        );
+    };
+
     const createShutterDoor = (x: number, z: number, rotY: number, key: string, neighborType: Room['type'] | null) => {
+        if (neighborType === 'HIDDEN' && doorOpenT > 0.1) {
+            return createHiddenHole(x, z, rotY, key);
+        }
         const doorWidth = 3;
         const doorHeight = 1.2;
         const frameDepth = 0.2;
@@ -790,6 +817,18 @@ const DungeonMesh: React.FC<{ engine: GameEngine, assets: AssetLoader }> = React
                 <mesh position={[0, -0.05, frameDepth / 2 + 0.03]}>
                     <boxGeometry args={[0.18, 0.18, 0.05]} />
                     <meshStandardMaterial color={handleGlow} emissive={handleGlow} emissiveIntensity={0.5} />
+                </mesh>
+                <mesh position={[-panelShift * 0.4, 0.1, frameDepth / 2 + 0.05]}>
+                    <boxGeometry args={[0.05, 0.7, 0.05]} />
+                    <meshStandardMaterial color="#f8fafc" emissive="#f8fafc" emissiveIntensity={0.6} />
+                </mesh>
+                <mesh position={[panelShift * 0.4, 0.1, frameDepth / 2 + 0.05]}>
+                    <boxGeometry args={[0.05, 0.7, 0.05]} />
+                    <meshStandardMaterial color="#f8fafc" emissive="#f8fafc" emissiveIntensity={0.6} />
+                </mesh>
+                <mesh position={[0, doorHeight / 2 + 0.08, 0]}>
+                    <boxGeometry args={[0.6, 0.15, 0.14]} />
+                    <meshStandardMaterial color="#9a7b52" emissive="#5c4a32" emissiveIntensity={0.25} />
                 </mesh>
             </group>
         );
@@ -1075,7 +1114,7 @@ export const GameScene: React.FC<RendererProps> = ({ engine }) => {
         engine.cameraQuaternion.copy(camera.quaternion);
     });
 
-    const roomKey = engine.currentRoom ? `${engine.currentRoom.x},${engine.currentRoom.y}` : 'void';
+    const roomKey = engine.currentRoom ? `${engine.currentRoom.x},${engine.currentRoom.y}:${engine.roomRevision}` : 'void';
 
     return (
         <group>

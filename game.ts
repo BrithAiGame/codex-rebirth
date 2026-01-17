@@ -35,6 +35,7 @@ export class GameEngine {
   entities: Entity[] = [];
   currentRoom: Room | null = null;
   dungeon: Room[] = [];
+  roomRevision: number = 0;
 
   // Notification system
   notification: string | null = null;
@@ -184,6 +185,7 @@ export class GameEngine {
     }
 
     this.currentRoom = room;
+    this.roomRevision += 1;
     
     // Sync clear status for Item Rooms (re-entry logic)
     if (room.type === 'ITEM' && room.itemCollected) {
@@ -765,17 +767,70 @@ export class GameEngine {
           { dir: Direction.RIGHT, dx: 1, dy: 0 }
       ];
 
-      const isNearWall = (dir: Direction) => {
-          if (dir === Direction.UP) return center.y <= radius && Math.abs(center.x - roomCenter.x) <= ts;
-          if (dir === Direction.DOWN) return center.y >= (CONSTANTS.ROOM_HEIGHT - 1) * ts - radius && Math.abs(center.x - roomCenter.x) <= ts;
-          if (dir === Direction.LEFT) return center.x <= radius && Math.abs(center.y - roomCenter.y) <= ts;
-          return center.x >= (CONSTANTS.ROOM_WIDTH - 1) * ts - radius && Math.abs(center.y - roomCenter.y) <= ts;
+      const circleHitsRect = (rect: { x: number; y: number; w: number; h: number }) => {
+          const closestX = Math.max(rect.x, Math.min(center.x, rect.x + rect.w));
+          const closestY = Math.max(rect.y, Math.min(center.y, rect.y + rect.h));
+          const dx = center.x - closestX;
+          const dy = center.y - closestY;
+          return (dx * dx + dy * dy) <= (radius * radius);
+      };
+
+      const hitsWallBand = (dir: Direction) => {
+          const roomW = (CONSTANTS.ROOM_WIDTH - 1) * ts;
+          const roomH = (CONSTANTS.ROOM_HEIGHT - 1) * ts;
+          const bandSize = ts * 1.4;
+          if (dir === Direction.UP) {
+              return circleHitsRect({ x: roomCenter.x - bandSize / 2, y: 0, w: bandSize, h: ts });
+          }
+          if (dir === Direction.DOWN) {
+              return circleHitsRect({ x: roomCenter.x - bandSize / 2, y: roomH - ts, w: bandSize, h: ts });
+          }
+          if (dir === Direction.LEFT) {
+              return circleHitsRect({ x: 0, y: roomCenter.y - bandSize / 2, w: ts, h: bandSize });
+          }
+          return circleHitsRect({ x: roomW - ts, y: roomCenter.y - bandSize / 2, w: ts, h: bandSize });
       };
 
       for (const d of dirs) {
           const neighbor = this.dungeon.find(r => r.x === this.currentRoom!.x + d.dx && r.y === this.currentRoom!.y + d.dy);
           if (!neighbor || neighbor.type !== 'HIDDEN') continue;
-          if (!isNearWall(d.dir)) continue;
+          if (!hitsWallBand(d.dir)) continue;
+
+          const carveIrregularHole = (room: Room, dir: Direction) => {
+              const h = room.layout.length;
+              const w = room.layout[0].length;
+              const cx = Math.floor(w / 2);
+              const cy = Math.floor(h / 2);
+              const mark = (x: number, y: number, value: number) => {
+                  if (y < 0 || y >= h || x < 0 || x >= w) return;
+                  room.layout[y][x] = value;
+              };
+              if (dir === Direction.UP) {
+                  mark(cx, 0, 3);
+                  mark(cx - 1, 0, 0);
+                  mark(cx + 1, 0, 0);
+                  mark(cx, 1, 0);
+                  mark(cx - 1, 1, 0);
+              } else if (dir === Direction.DOWN) {
+                  mark(cx, h - 1, 3);
+                  mark(cx - 1, h - 1, 0);
+                  mark(cx + 1, h - 1, 0);
+                  mark(cx, h - 2, 0);
+                  mark(cx + 1, h - 2, 0);
+              } else if (dir === Direction.LEFT) {
+                  mark(0, cy, 3);
+                  mark(0, cy - 1, 0);
+                  mark(0, cy + 1, 0);
+                  mark(1, cy, 0);
+                  mark(1, cy - 1, 0);
+              } else if (dir === Direction.RIGHT) {
+                  mark(w - 1, cy, 3);
+                  mark(w - 1, cy - 1, 0);
+                  mark(w - 1, cy + 1, 0);
+                  mark(w - 2, cy, 0);
+                  mark(w - 2, cy + 1, 0);
+              }
+          };
 
           this.currentRoom.doors[d.dir] = true;
           const opposite = d.dir === Direction.UP ? Direction.DOWN :
@@ -784,10 +839,14 @@ export class GameEngine {
           neighbor.doors[opposite] = true;
           neighbor.cleared = true;
           neighbor.forcedOpen = true;
+          neighbor.visited = true;
 
           carveDoors(this.currentRoom.layout, this.currentRoom.doors);
           carveDoors(neighbor.layout, neighbor.doors);
+          carveIrregularHole(this.currentRoom, d.dir);
+          carveIrregularHole(neighbor, opposite);
           if (!neighbor.doorAnim) neighbor.doorAnim = { state: 'open', t: 1 };
+          this.roomRevision += 1;
           break;
       }
   }

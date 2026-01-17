@@ -2227,7 +2227,7 @@ export default function App() {
                    <div className="text-gray-600 text-xs font-bold uppercase mb-2 w-full text-center tracking-widest">{t('MAP')}</div>
                    <div className="relative w-full h-full bg-[#050505] rounded border border-gray-800 flex items-center justify-center overflow-hidden">
                        {settings.showMinimap && gameStats && gameStats.dungeon ? (() => {
-                            const visibleRooms = gameStats.dungeon.filter(r => r.type !== 'HIDDEN' || r.visited);
+                            const visibleRooms = gameStats.dungeon;
                             const xs = visibleRooms.map(r => r.x);
                             const ys = visibleRooms.map(r => r.y);
                             const minX = Math.min(...xs); const maxX = Math.max(...xs);
@@ -2238,13 +2238,13 @@ export default function App() {
                                 <div className="relative" style={{ width: w*cellSize, height: h*cellSize }}>
                                     {visibleRooms.map((r, i) => {
                                         const isCurrent = r.x === gameStats.currentRoomPos.x && r.y === gameStats.currentRoomPos.y;
-                                        const isHidden = r.type === 'HIDDEN' && r.visited;
+                                        const isHidden = r.type === 'HIDDEN';
                                         return (
                                         <div key={i} 
-                                            className={`absolute border border-black/20 rounded-sm flex items-center justify-center text-[10px] font-bold ${isCurrent ? 'bg-white z-10 shadow-[0_0_8px_rgba(255,255,255,0.8)] text-black' : r.visited ? (r.type === 'BOSS' ? 'bg-red-900' : r.type === 'ITEM' ? 'bg-amber-600' : r.type === 'CHEST' ? 'bg-yellow-500' : r.type === 'DEVIL' ? 'bg-rose-700' : r.type === 'HIDDEN' ? 'bg-slate-700' : 'bg-gray-600') : 'bg-gray-800'}`}
+                                            className={`absolute border border-black/20 rounded-sm flex items-center justify-center text-[10px] font-bold ${isCurrent ? 'z-10 shadow-[0_0_8px_rgba(255,255,255,0.8)]' : ''} ${isHidden ? 'bg-[#0b1b3f] text-slate-200' : r.visited ? (r.type === 'BOSS' ? 'bg-red-900' : r.type === 'ITEM' ? 'bg-amber-600' : r.type === 'CHEST' ? 'bg-yellow-500' : r.type === 'DEVIL' ? 'bg-rose-700' : 'bg-gray-600') : 'bg-gray-800'} ${isCurrent && isHidden ? 'ring-1 ring-cyan-200/70' : ''} ${isCurrent && !isHidden ? 'bg-white text-black' : ''}`}
                                             style={{ left: (r.x - minX)*cellSize, top: (r.y - minY)*cellSize, width: cellSize, height: cellSize }} 
                                         >
-                                            {isHidden && !isCurrent ? '?' : ''}
+                                            {isHidden ? '?' : ''}
                                         </div>
                                         );
                                     })}
@@ -2284,7 +2284,7 @@ export default function App() {
                {settings.showMinimap && gameStats && gameStats.dungeon && (
                    <div className="relative w-full h-full flex items-center justify-center transform scale-75 origin-center">
                         {(() => {
-                            const visibleRooms = gameStats.dungeon.filter(r => r.type !== 'HIDDEN' || r.visited);
+                            const visibleRooms = gameStats.dungeon;
                             const xs = visibleRooms.map(r => r.x);
                             const ys = visibleRooms.map(r => r.y);
                             const minX = Math.min(...xs); const minY = Math.min(...ys);
@@ -2292,11 +2292,11 @@ export default function App() {
                                 <div className="relative">
                                     {visibleRooms.map((r, i) => {
                                         const isCurrent = r.x === gameStats.currentRoomPos.x && r.y === gameStats.currentRoomPos.y;
-                                        const isHidden = r.type === 'HIDDEN' && r.visited;
+                                        const isHidden = r.type === 'HIDDEN';
                                         return (
-                                        <div key={i} className={`absolute w-3 h-3 rounded-sm flex items-center justify-center text-[8px] font-bold ${isCurrent ? 'bg-white text-black' : r.visited ? (r.type === 'HIDDEN' ? 'bg-slate-700 text-white' : 'bg-gray-500') : 'bg-gray-800'}`}
+                                        <div key={i} className={`absolute w-3 h-3 rounded-sm flex items-center justify-center text-[8px] font-bold ${isHidden ? 'bg-[#0b1b3f] text-slate-200' : r.visited ? 'bg-gray-500' : 'bg-gray-800'} ${isCurrent && !isHidden ? 'bg-white text-black' : ''} ${isCurrent && isHidden ? 'ring-1 ring-cyan-200/70' : ''}`}
                                              style={{ left: (r.x - minX)*12, top: (r.y - minY)*12 }}>
-                                            {isHidden && !isCurrent ? '?' : ''}
+                                            {isHidden ? '?' : ''}
                                         </div>
                                         );
                                     })}
