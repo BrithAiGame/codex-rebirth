@@ -2053,9 +2053,12 @@ export default function App() {
                         {/* RESTART BAR */}
                         {gameStats && gameStats.restartTimer !== undefined && gameStats.restartTimer > 0 && (
                             <div className="absolute top-1/4 left-1/2 transform -translate-x-1/2 z-50 flex flex-col items-center">
-                                <div className="text-red-500 text-lg md:text-xl mb-2 font-black tracking-widest bg-black/90 px-4 py-1 rounded border border-red-500/50 shadow-lg whitespace-nowrap">{t('HOLD_R')}</div>
-                                <div className="w-48 md:w-64 h-4 bg-gray-900 rounded-full overflow-hidden border border-gray-500 shadow-xl">
-                                    <div className="h-full bg-red-600" style={{width: `${Math.min(100, (gameStats.restartTimer / 60) * 100)}%`}} />
+                                <div className="text-red-300 text-lg md:text-xl mb-2 font-black tracking-widest bg-black/90 px-4 py-1 rounded-full border border-red-400/60 shadow-[0_0_18px_rgba(248,113,113,0.4)] whitespace-nowrap">
+                                    {t('HOLD_R')}
+                                </div>
+                                <div className="restart-bar w-52 md:w-72 h-4 rounded-full overflow-hidden border border-red-500/60 shadow-[0_0_22px_rgba(239,68,68,0.35)]">
+                                    <div className="restart-fill h-full" style={{width: `${Math.min(100, (gameStats.restartTimer / 60) * 100)}%`}} />
+                                    <div className="restart-sheen" />
                                 </div>
                             </div>
                         )}
@@ -2063,9 +2066,10 @@ export default function App() {
                         {/* BOSS BAR */}
                         {gameStats && gameStats.boss && (
                             <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 w-[80%] max-w-[600px] z-10">
-                                <div className="text-center text-red-500 font-bold mb-1 text-lg tracking-[0.2em] uppercase drop-shadow-md">{gameStats.boss.name}</div>
-                                <div className="h-4 bg-red-950/80 border-2 border-red-900 rounded-sm relative overflow-hidden shadow-lg">
-                                    <div className="h-full bg-gradient-to-r from-red-700 to-red-500 transition-all duration-300" style={{ width: `${(gameStats.boss.hp / gameStats.boss.maxHp) * 100}%` }} />
+                                <div className="text-center text-red-300 font-black mb-2 text-lg tracking-[0.3em] uppercase drop-shadow-[0_0_10px_rgba(239,68,68,0.6)]">{gameStats.boss.name}</div>
+                                <div className="boss-bar h-5 rounded-sm relative overflow-hidden border border-red-500/70 shadow-[0_0_24px_rgba(239,68,68,0.35)]">
+                                    <div className="boss-fill h-full transition-all duration-300" style={{ width: `${(gameStats.boss.hp / gameStats.boss.maxHp) * 100}%` }} />
+                                    <div className="boss-sheen" />
                                 </div>
                             </div>
                         )}
@@ -2522,6 +2526,41 @@ export default function App() {
         }
         .mosaic-in { animation: mosaicIn 1s steps(6) forwards; }
         .mosaic-out { animation: mosaicOut 1s steps(6) forwards; }
+        .restart-bar {
+          background: radial-gradient(circle at 20% 50%, rgba(239,68,68,0.25), rgba(20,20,20,0.9));
+          position: relative;
+        }
+        .restart-fill {
+          background: linear-gradient(90deg, #f43f5e, #fb7185, #fbbf24);
+          box-shadow: 0 0 18px rgba(251,113,133,0.65), inset 0 0 8px rgba(255,255,255,0.2);
+        }
+        .restart-sheen {
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(120deg, transparent, rgba(255,255,255,0.35), transparent);
+          transform: translateX(-60%);
+          animation: sheen 1.4s linear infinite;
+          pointer-events: none;
+        }
+        .boss-bar {
+          background: linear-gradient(180deg, rgba(60,0,0,0.8), rgba(10,0,0,0.95));
+        }
+        .boss-fill {
+          background: linear-gradient(90deg, #dc2626, #fb7185, #f59e0b);
+          box-shadow: 0 0 22px rgba(239,68,68,0.6), inset 0 0 8px rgba(255,255,255,0.18);
+        }
+        .boss-sheen {
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent);
+          opacity: 0.6;
+          animation: sheen 1.8s linear infinite;
+          pointer-events: none;
+        }
+        @keyframes sheen {
+          0% { transform: translateX(-70%); }
+          100% { transform: translateX(120%); }
+        }
         @keyframes mosaicIn {
           0% { opacity: 0; background-size: 4px 4px; }
           100% { opacity: 1; background-size: 24px 24px; }
