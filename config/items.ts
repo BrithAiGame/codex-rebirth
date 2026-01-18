@@ -657,6 +657,518 @@ export const ITEMS: ItemConfig[] = [
     sprite: 'ITEM_SIGIL_SERPENT',
     weight: 5,
     stats: { homing: 0.4, bounce: 1 }
+  },
+  {
+    id: 'aurora_core',
+    type: ItemType.AURORA_CORE,
+    nameKey: 'ITEM_AURORA_CORE_NAME',
+    descKey: 'ITEM_AURORA_CORE_DESC',
+    color: '#38bdf8',
+    sprite: 'ITEM_SIGIL_AURORA',
+    weight: 5,
+    stats: { damage: 1.15, range: 1.1, bulletShape: 'ring' },
+    glow: '#7dd3fc'
+  },
+  {
+    id: 'vortex_driver',
+    type: ItemType.VORTEX_DRIVER,
+    nameKey: 'ITEM_VORTEX_DRIVER_NAME',
+    descKey: 'ITEM_VORTEX_DRIVER_DESC',
+    color: '#22d3ee',
+    sprite: 'ITEM_SIGIL_VORTEX',
+    weight: 5,
+    stats: { shotSpeed: 0.6, homing: 0.35, gravityScale: 0.15 }
+  },
+  {
+    id: 'gravity_well',
+    type: ItemType.GRAVITY_WELL,
+    nameKey: 'ITEM_GRAVITY_WELL_NAME',
+    descKey: 'ITEM_GRAVITY_WELL_DESC',
+    color: '#6366f1',
+    sprite: 'ITEM_SIGIL_GRAVITYWELL',
+    weight: 4,
+    stats: { gravityScale: 0.35, bulletScale: 0.2, range: 0.9 }
+  },
+  {
+    id: 'echo_orb',
+    type: ItemType.ECHO_ORB,
+    nameKey: 'ITEM_ECHO_ORB_NAME',
+    descKey: 'ITEM_ECHO_ORB_DESC',
+    color: '#c084fc',
+    sprite: 'ITEM_SIGIL_ECHO',
+    weight: 5,
+    stats: { chain: 1, bounce: 1, shotSpeed: 0.2 }
+  },
+  {
+    id: 'shatter_heart',
+    type: ItemType.SHATTER_HEART,
+    nameKey: 'ITEM_SHATTER_HEART_NAME',
+    descKey: 'ITEM_SHATTER_HEART_DESC',
+    color: '#f87171',
+    sprite: 'ITEM_SIGIL_SHATTER',
+    weight: 5,
+    stats: { damage: 1.25, bulletShape: 'shard', shotSpread: 3 }
+  },
+  {
+    id: 'ember_seed',
+    type: ItemType.EMBER_SEED,
+    nameKey: 'ITEM_EMBER_SEED_NAME',
+    descKey: 'ITEM_EMBER_SEED_DESC',
+    color: '#fb7185',
+    sprite: 'ITEM_SIGIL_EMBER',
+    weight: 5,
+    stats: { explosive: 0.35, damage: 1.1 },
+    glow: '#fb7185'
+  },
+  {
+    id: 'mist_cloak',
+    type: ItemType.MIST_CLOAK,
+    nameKey: 'ITEM_MIST_CLOAK_NAME',
+    descKey: 'ITEM_MIST_CLOAK_DESC',
+    color: '#94a3b8',
+    sprite: 'ITEM_SIGIL_MIST',
+    weight: 6,
+    stats: { speed: 0.4, shotSpeed: -0.2, range: 1.1 }
+  },
+  {
+    id: 'iron_fang',
+    type: ItemType.IRON_FANG,
+    nameKey: 'ITEM_IRON_FANG_NAME',
+    descKey: 'ITEM_IRON_FANG_DESC',
+    color: '#9ca3af',
+    sprite: 'ITEM_SIGIL_IRONFANG',
+    weight: 5,
+    stats: { pierce: 2, knockback: 1.1, damage: 1.1 }
+  },
+  {
+    id: 'radiant_halo',
+    type: ItemType.RADIANT_HALO,
+    nameKey: 'ITEM_RADIANT_HALO_NAME',
+    descKey: 'ITEM_RADIANT_HALO_DESC',
+    color: '#fde68a',
+    sprite: 'ITEM_SIGIL_RADIANT',
+    weight: 5,
+    stats: { range: 1.2, bulletShape: 'ring', shotSpread: 2 },
+    glow: '#fde68a'
+  },
+  {
+    id: 'nova_engine',
+    type: ItemType.NOVA_ENGINE,
+    nameKey: 'ITEM_NOVA_ENGINE_NAME',
+    descKey: 'ITEM_NOVA_ENGINE_DESC',
+    color: '#fbbf24',
+    sprite: 'ITEM_SIGIL_NOVAENGINE',
+    weight: 4,
+    stats: { shotSpread: 8, bulletScale: -0.1, shotSpeed: -0.3 }
+  },
+  {
+    id: 'fractal_shard',
+    type: ItemType.FRACTAL_SHARD,
+    nameKey: 'ITEM_FRACTAL_SHARD_NAME',
+    descKey: 'ITEM_FRACTAL_SHARD_DESC',
+    color: '#a7f3d0',
+    sprite: 'ITEM_SIGIL_FRACTAL',
+    weight: 5,
+    stats: { bulletShape: 'shard', pierce: 1, damage: 1.1 }
+  },
+  {
+    id: 'mirage_lens',
+    type: ItemType.MIRAGE_LENS,
+    nameKey: 'ITEM_MIRAGE_LENS_NAME',
+    descKey: 'ITEM_MIRAGE_LENS_DESC',
+    color: '#f472b6',
+    sprite: 'ITEM_SIGIL_MIRAGE',
+    weight: 6,
+    stats: { homing: 0.5, shotSpeed: 0.3 }
+  },
+  {
+    id: 'thorn_crown',
+    type: ItemType.THORN_CROWN,
+    nameKey: 'ITEM_THORN_CROWN_NAME',
+    descKey: 'ITEM_THORN_CROWN_DESC',
+    color: '#f97316',
+    sprite: 'ITEM_SIGIL_THORN',
+    weight: 5,
+    stats: { impactDamage: 0.6, knockback: 1.1 }
+  },
+  {
+    id: 'glowstone',
+    type: ItemType.GLOWSTONE,
+    nameKey: 'ITEM_GLOWSTONE_NAME',
+    descKey: 'ITEM_GLOWSTONE_DESC',
+    color: '#fef08a',
+    sprite: 'ITEM_SIGIL_GLOWSTONE',
+    weight: 5,
+    stats: { bulletShape: 'bolt', shotSpeed: 0.6 },
+    glow: '#fde68a'
+  },
+  {
+    id: 'pulse_capacitor',
+    type: ItemType.PULSE_CAPACITOR,
+    nameKey: 'ITEM_PULSE_CAPACITOR_NAME',
+    descKey: 'ITEM_PULSE_CAPACITOR_DESC',
+    color: '#60a5fa',
+    sprite: 'ITEM_SIGIL_PULSE',
+    weight: 6,
+    stats: { fireRate: 0.85, shotSpeed: 0.4 }
+  },
+  {
+    id: 'rift_anchor',
+    type: ItemType.RIFT_ANCHOR,
+    nameKey: 'ITEM_RIFT_ANCHOR_NAME',
+    descKey: 'ITEM_RIFT_ANCHOR_DESC',
+    color: '#a855f7',
+    sprite: 'ITEM_SIGIL_RIFT',
+    weight: 5,
+    stats: { bounce: 2, gravityScale: 0.2 }
+  },
+  {
+    id: 'celestial_string',
+    type: ItemType.CELESTIAL_STRING,
+    nameKey: 'ITEM_CELESTIAL_STRING_NAME',
+    descKey: 'ITEM_CELESTIAL_STRING_DESC',
+    color: '#bae6fd',
+    sprite: 'ITEM_SIGIL_CELESTIAL',
+    weight: 5,
+    stats: { range: 1.25, shotSpread: 5 }
+  },
+  {
+    id: 'glacier_fang',
+    type: ItemType.GLACIER_FANG,
+    nameKey: 'ITEM_GLACIER_FANG_NAME',
+    descKey: 'ITEM_GLACIER_FANG_DESC',
+    color: '#7dd3fc',
+    sprite: 'ITEM_SIGIL_GLACIER',
+    weight: 5,
+    stats: { shotSpeed: -0.4, damage: 1.2, knockback: 1.2 }
+  },
+  {
+    id: 'volt_crown',
+    type: ItemType.VOLT_CROWN,
+    nameKey: 'ITEM_VOLT_CROWN_NAME',
+    descKey: 'ITEM_VOLT_CROWN_DESC',
+    color: '#c4b5fd',
+    sprite: 'ITEM_SIGIL_VOLT',
+    weight: 4,
+    stats: { chain: 3, shotSpeed: 0.3 },
+    glow: '#c4b5fd'
+  },
+  {
+    id: 'cosmic_spore',
+    type: ItemType.COSMIC_SPORE,
+    nameKey: 'ITEM_COSMIC_SPORE_NAME',
+    descKey: 'ITEM_COSMIC_SPORE_DESC',
+    color: '#f0abfc',
+    sprite: 'ITEM_SIGIL_COSMIC',
+    weight: 6,
+    stats: { homing: 0.25, shotSpread: 3, bulletScale: 0.1 }
+  },
+  {
+    id: 'blade_orbit',
+    type: ItemType.BLADE_ORBIT,
+    nameKey: 'ITEM_BLADE_ORBIT_NAME',
+    descKey: 'ITEM_BLADE_ORBIT_DESC',
+    color: '#e5e7eb',
+    sprite: 'ITEM_SIGIL_BLADE',
+    weight: 5,
+    stats: { bulletShape: 'cube', shotSpeed: 0.2, pierce: 1, knockback: 1.2 }
+  },
+  {
+    id: 'quake_core',
+    type: ItemType.QUAKE_CORE,
+    nameKey: 'ITEM_QUAKE_CORE_NAME',
+    descKey: 'ITEM_QUAKE_CORE_DESC',
+    color: '#fca5a5',
+    sprite: 'ITEM_SIGIL_QUAKE',
+    weight: 5,
+    stats: { impactDamage: 0.8, explosive: 0.25 }
+  },
+  {
+    id: 'shadow_coil',
+    type: ItemType.SHADOW_COIL,
+    nameKey: 'ITEM_SHADOW_COIL_NAME',
+    descKey: 'ITEM_SHADOW_COIL_DESC',
+    color: '#111827',
+    sprite: 'ITEM_SIGIL_SHADOW',
+    weight: 6,
+    stats: { damage: 1.15, range: 0.95, shotSpeed: 0.2 }
+  },
+  {
+    id: 'sunlit_sigil',
+    type: ItemType.SUNLIT_SIGIL,
+    nameKey: 'ITEM_SUNLIT_SIGIL_NAME',
+    descKey: 'ITEM_SUNLIT_SIGIL_DESC',
+    color: '#fbbf24',
+    sprite: 'ITEM_SIGIL_SUNLIT',
+    weight: 4,
+    stats: { shotMode: 'laser', fireRate: 0.9 },
+    glow: '#fde047'
+  },
+  {
+    id: 'moonlit_sigil',
+    type: ItemType.MOONLIT_SIGIL,
+    nameKey: 'ITEM_MOONLIT_SIGIL_NAME',
+    descKey: 'ITEM_MOONLIT_SIGIL_DESC',
+    color: '#a5b4fc',
+    sprite: 'ITEM_SIGIL_MOONLIT',
+    weight: 4,
+    stats: { shotMode: 'charge', chargeRate: 0.4, damage: 1.1 }
+  },
+  {
+    id: 'star_pendulum',
+    type: ItemType.STAR_PENDULUM,
+    nameKey: 'ITEM_STAR_PENDULUM_NAME',
+    descKey: 'ITEM_STAR_PENDULUM_DESC',
+    color: '#fcd34d',
+    sprite: 'ITEM_SIGIL_PENDULUM',
+    weight: 5,
+    stats: { bounce: 1, chain: 1, shotSpeed: 0.2 }
+  },
+  {
+    id: 'storm_cape',
+    type: ItemType.STORM_CAPE,
+    nameKey: 'ITEM_STORM_CAPE_NAME',
+    descKey: 'ITEM_STORM_CAPE_DESC',
+    color: '#38bdf8',
+    sprite: 'ITEM_SIGIL_STORMCAPE',
+    weight: 5,
+    stats: { homing: 0.3, chain: 2, shotSpeed: 0.2 }
+  },
+  {
+    id: 'ghost_mirror',
+    type: ItemType.GHOST_MIRROR,
+    nameKey: 'ITEM_GHOST_MIRROR_NAME',
+    descKey: 'ITEM_GHOST_MIRROR_DESC',
+    color: '#e5e7eb',
+    sprite: 'ITEM_SIGIL_GHOST',
+    weight: 6,
+    stats: { pierce: 1, shotSpeed: 0.3, range: 1.1 }
+  },
+  {
+    id: 'crimson_gauge',
+    type: ItemType.CRIMSON_GAUGE,
+    nameKey: 'ITEM_CRIMSON_GAUGE_NAME',
+    descKey: 'ITEM_CRIMSON_GAUGE_DESC',
+    color: '#ef4444',
+    sprite: 'ITEM_SIGIL_CRIMSON',
+    weight: 4,
+    stats: { damage: 1.25, maxHp: -1 }
+  },
+  {
+    id: 'nebula_rod',
+    type: ItemType.NEBULA_ROD,
+    nameKey: 'ITEM_NEBULA_ROD_NAME',
+    descKey: 'ITEM_NEBULA_ROD_DESC',
+    color: '#d946ef',
+    sprite: 'ITEM_SIGIL_NEBULA',
+    weight: 5,
+    stats: { bulletShape: 'ring', range: 1.15, shotSpread: 4 }
+  },
+  {
+    id: 'comet_drive',
+    type: ItemType.COMET_DRIVE,
+    nameKey: 'ITEM_COMET_DRIVE_NAME',
+    descKey: 'ITEM_COMET_DRIVE_DESC',
+    color: '#38bdf8',
+    sprite: 'ITEM_SIGIL_COMETDRIVE',
+    weight: 5,
+    stats: { shotSpeed: 0.8, fireRate: 0.9 }
+  },
+  {
+    id: 'lantern_core',
+    type: ItemType.LANTERN_CORE,
+    nameKey: 'ITEM_LANTERN_CORE_NAME',
+    descKey: 'ITEM_LANTERN_CORE_DESC',
+    color: '#fde68a',
+    sprite: 'ITEM_SIGIL_LANTERN',
+    weight: 6,
+    stats: { range: 1.1, homing: 0.2 },
+    glow: '#fde68a'
+  },
+  {
+    id: 'vine_spiral',
+    type: ItemType.VINE_SPIRAL,
+    nameKey: 'ITEM_VINE_SPIRAL_NAME',
+    descKey: 'ITEM_VINE_SPIRAL_DESC',
+    color: '#22c55e',
+    sprite: 'ITEM_SIGIL_VINE',
+    weight: 6,
+    stats: { knockback: 1.3, shotSpeed: -0.2 }
+  },
+  {
+    id: 'omega_drum',
+    type: ItemType.OMEGA_DRUM,
+    nameKey: 'ITEM_OMEGA_DRUM_NAME',
+    descKey: 'ITEM_OMEGA_DRUM_DESC',
+    color: '#f97316',
+    sprite: 'ITEM_SIGIL_OMEGA',
+    weight: 4,
+    stats: { shotSpread: 9, shotSpeed: -0.5, fireRate: 1.1 }
+  },
+  {
+    id: 'raze_sigil',
+    type: ItemType.RAZE_SIGIL,
+    nameKey: 'ITEM_RAZE_SIGIL_NAME',
+    descKey: 'ITEM_RAZE_SIGIL_DESC',
+    color: '#fb7185',
+    sprite: 'ITEM_SIGIL_RAZE',
+    weight: 5,
+    stats: { explosive: 0.5, damage: 1.2 }
+  },
+  {
+    id: 'spike_matrix',
+    type: ItemType.SPIKE_MATRIX,
+    nameKey: 'ITEM_SPIKE_MATRIX_NAME',
+    descKey: 'ITEM_SPIKE_MATRIX_DESC',
+    color: '#f87171',
+    sprite: 'ITEM_SIGIL_SPIKE',
+    weight: 5,
+    stats: { pierce: 3, bulletShape: 'shard' }
+  },
+  {
+    id: 'glass_ring',
+    type: ItemType.GLASS_RING,
+    nameKey: 'ITEM_GLASS_RING_NAME',
+    descKey: 'ITEM_GLASS_RING_DESC',
+    color: '#e2e8f0',
+    sprite: 'ITEM_SIGIL_GLASSRING',
+    weight: 5,
+    stats: { bulletShape: 'ring', bulletScale: 0.2, shotSpeed: 0.2 }
+  },
+  {
+    id: 'thunder_grid',
+    type: ItemType.THUNDER_GRID,
+    nameKey: 'ITEM_THUNDER_GRID_NAME',
+    descKey: 'ITEM_THUNDER_GRID_DESC',
+    color: '#a78bfa',
+    sprite: 'ITEM_SIGIL_THUNDERGRID',
+    weight: 5,
+    stats: { chain: 4, shotSpeed: 0.3 },
+    glow: '#a78bfa'
+  },
+  {
+    id: 'tidal_core',
+    type: ItemType.TIDAL_CORE,
+    nameKey: 'ITEM_TIDAL_CORE_NAME',
+    descKey: 'ITEM_TIDAL_CORE_DESC',
+    color: '#38bdf8',
+    sprite: 'ITEM_SIGIL_TIDAL',
+    weight: 6,
+    stats: { shotSpeed: -0.2, range: 1.3, knockback: 1.1 }
+  },
+  {
+    id: 'arc_beacon',
+    type: ItemType.ARC_BEACON,
+    nameKey: 'ITEM_ARC_BEACON_NAME',
+    descKey: 'ITEM_ARC_BEACON_DESC',
+    color: '#38bdf8',
+    sprite: 'ITEM_SIGIL_ARC',
+    weight: 6,
+    stats: { homing: 0.4, chain: 1 }
+  },
+  {
+    id: 'glimmer_feather',
+    type: ItemType.GLIMMER_FEATHER,
+    nameKey: 'ITEM_GLIMMER_FEATHER_NAME',
+    descKey: 'ITEM_GLIMMER_FEATHER_DESC',
+    color: '#fef3c7',
+    sprite: 'ITEM_SIGIL_GLIMMER',
+    weight: 6,
+    stats: { speed: 0.6, shotSpeed: 0.2 },
+    glow: '#fde68a'
+  },
+  {
+    id: 'fission_seed',
+    type: ItemType.FISSION_SEED,
+    nameKey: 'ITEM_FISSION_SEED_NAME',
+    descKey: 'ITEM_FISSION_SEED_DESC',
+    color: '#f97316',
+    sprite: 'ITEM_SIGIL_FISSION',
+    weight: 5,
+    stats: { shotSpread: 5, explosive: 0.2 }
+  },
+  {
+    id: 'flare_torch',
+    type: ItemType.FLARE_TORCH,
+    nameKey: 'ITEM_FLARE_TORCH_NAME',
+    descKey: 'ITEM_FLARE_TORCH_DESC',
+    color: '#fb7185',
+    sprite: 'ITEM_SIGIL_FLARE',
+    weight: 6,
+    stats: { damage: 1.15, shotSpeed: 0.5 },
+    glow: '#fb7185'
+  },
+  {
+    id: 'chrono_cell',
+    type: ItemType.CHRONO_CELL,
+    nameKey: 'ITEM_CHRONO_CELL_NAME',
+    descKey: 'ITEM_CHRONO_CELL_DESC',
+    color: '#facc15',
+    sprite: 'ITEM_SIGIL_CHRONO',
+    weight: 5,
+    stats: { fireRate: 0.75, shotSpeed: -0.2 }
+  },
+  {
+    id: 'rune_gear',
+    type: ItemType.RUNE_GEAR,
+    nameKey: 'ITEM_RUNE_GEAR_NAME',
+    descKey: 'ITEM_RUNE_GEAR_DESC',
+    color: '#a3a3a3',
+    sprite: 'ITEM_SIGIL_RUNEGEAR',
+    weight: 6,
+    stats: { bounce: 2, shotSpeed: 0.1 }
+  },
+  {
+    id: 'plasma_pearl',
+    type: ItemType.PLASMA_PEARL,
+    nameKey: 'ITEM_PLASMA_PEARL_NAME',
+    descKey: 'ITEM_PLASMA_PEARL_DESC',
+    color: '#7c3aed',
+    sprite: 'ITEM_SIGIL_PLASMAPEARL',
+    weight: 5,
+    stats: { bulletShape: 'bolt', shotSpeed: 0.4, chain: 1 },
+    glow: '#a855f7'
+  },
+  {
+    id: 'shock_lens',
+    type: ItemType.SHOCK_LENS,
+    nameKey: 'ITEM_SHOCK_LENS_NAME',
+    descKey: 'ITEM_SHOCK_LENS_DESC',
+    color: '#f59e0b',
+    sprite: 'ITEM_SIGIL_SHOCKLENS',
+    weight: 6,
+    stats: { impactDamage: 0.5, knockback: 1.2 }
+  },
+  {
+    id: 'aether_spine',
+    type: ItemType.AETHER_SPINE,
+    nameKey: 'ITEM_AETHER_SPINE_NAME',
+    descKey: 'ITEM_AETHER_SPINE_DESC',
+    color: '#5eead4',
+    sprite: 'ITEM_SIGIL_AETHER',
+    weight: 6,
+    stats: { pierce: 1, homing: 0.2, range: 1.1 }
+  },
+  {
+    id: 'dragon_scale',
+    type: ItemType.DRAGON_SCALE,
+    nameKey: 'ITEM_DRAGON_SCALE_NAME',
+    descKey: 'ITEM_DRAGON_SCALE_DESC',
+    color: '#10b981',
+    sprite: 'ITEM_SIGIL_DRAGON',
+    weight: 5,
+    stats: { maxHp: 1, damage: 1.1, knockback: 1.2 }
+  },
+  {
+    id: 'phoenix_asp',
+    type: ItemType.PHOENIX_ASP,
+    nameKey: 'ITEM_PHOENIX_ASP_NAME',
+    descKey: 'ITEM_PHOENIX_ASP_DESC',
+    color: '#f97316',
+    sprite: 'ITEM_SIGIL_PHOENIX',
+    weight: 4,
+    stats: { shotMode: 'charge', chargeRate: 0.6, damage: 1.2 },
+    glow: '#fb7185'
   }
 ];
 

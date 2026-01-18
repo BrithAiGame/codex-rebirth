@@ -368,6 +368,7 @@ export default function App() {
   const localDeadRef = useRef(false);
   const deathMarkersRef = useRef<Set<string>>(new Set());
   const bossReviveSentRef = useRef<string | null>(null);
+  const codexItems = useMemo(() => [...ITEMS, ...DROPS], []);
   const tooltipClamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
   const handleItemTooltip = (e: React.MouseEvent, name: string, desc: string) => {
       if (!desc) return;
@@ -1774,13 +1775,18 @@ export default function App() {
 
            // --- MAIN MENU NAV ---
            if (status === GameStatus.MENU) {
-              if (e.code === 'ArrowUp') setMenuSelection(prev => (prev - 1 + 3) % 3);
-              if (e.code === 'ArrowDown') setMenuSelection(prev => (prev + 1) % 3);
+              if (e.code === 'ArrowUp') setMenuSelection(prev => (prev - 1 + 4) % 4);
+              if (e.code === 'ArrowDown') setMenuSelection(prev => (prev + 1) % 4);
               if (isEnter) { 
                   if (menuSelection === 0) setStatus(GameStatus.CHARACTER_SELECT); 
                   else if (menuSelection === 1) { setStatus(GameStatus.ONLINE); setOnlineView('menu'); setMenuSelection(0); connectWs(); }
+                  else if (menuSelection === 2) setStatus(GameStatus.CODEX);
                   else setShowSettings(true); 
               }
+           }
+           // --- CODEX NAV ---
+           else if (status === GameStatus.CODEX) {
+               if (isEsc) setStatus(GameStatus.MENU);
            }
            // --- PAUSE MENU NAV ---
            else if (status === GameStatus.PAUSED) {
@@ -2088,7 +2094,34 @@ export default function App() {
                                 <h1 className="text-6xl md:text-8xl font-black text-transparent bg-clip-text bg-gradient-to-b from-cyan-400 to-blue-900 mb-8 tracking-tighter drop-shadow-2xl" style={{ fontFamily: "'GameFontZh', monospace" }}>{t('GAME_TITLE')}</h1>
                                 <button className={getBtnClass(0)} onClick={() => setStatus(GameStatus.CHARACTER_SELECT)} onMouseEnter={() => setMenuSelection(0)}>{t('START_RUN')}</button>
                                 <button className={getBtnClass(1)} onClick={() => { setStatus(GameStatus.ONLINE); setOnlineView('menu'); setMenuSelection(0); connectWs(); }} onMouseEnter={() => setMenuSelection(1)}>联机游戏</button>
-                                <button className={getBtnClass(2)} onClick={() => setShowSettings(true)} onMouseEnter={() => setMenuSelection(2)}>{t('SETTINGS')}</button>
+                                <button className={getBtnClass(2)} onClick={() => setStatus(GameStatus.CODEX)} onMouseEnter={() => setMenuSelection(2)}>{t('ITEM_CODEX')}</button>
+                                <button className={getBtnClass(3)} onClick={() => setShowSettings(true)} onMouseEnter={() => setMenuSelection(3)}>{t('SETTINGS')}</button>
+                            </div>
+                        )}
+
+                        {status === GameStatus.CODEX && !showSettings && (
+                            <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/90 backdrop-blur-md px-6">
+                                <div className="w-full max-w-6xl flex flex-col items-center">
+                                    <div className="text-4xl md:text-5xl font-black text-white tracking-[0.2em] border-b-4 border-white pb-4 mb-6">{t('ITEM_CODEX_TITLE')}</div>
+                                    <div className="w-full max-w-5xl bg-neutral-950 border-2 border-gray-700 shadow-2xl p-4">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[60vh] overflow-y-auto custom-scrollbar pr-2">
+                                            {codexItems.map((item, idx) => (
+                                                <div key={`${item.id}-${idx}`} className="flex gap-3 bg-black/70 border border-gray-700 rounded p-3 hover:border-amber-500 transition-colors">
+                                                    <div className="w-16 h-16 bg-black border border-gray-800 rounded flex items-center justify-center flex-shrink-0">
+                                                        <SpritePreview spriteName={item.sprite} assetLoader={uiAssetLoader} size={48} />
+                                                    </div>
+                                                    <div className="flex flex-col">
+                                                        <div className="text-amber-400 font-bold text-sm md:text-base">{t(item.nameKey)}</div>
+                                                        <div className="text-gray-400 text-xs md:text-sm leading-snug">{t(item.descKey)}</div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <button className="mt-6 px-6 py-2 border-2 border-gray-500 text-gray-300 font-bold tracking-widest hover:border-white hover:text-white transition-colors" onClick={() => setStatus(GameStatus.MENU)}>
+                                        {t('ITEM_CODEX_BACK')}
+                                    </button>
+                                </div>
                             </div>
                         )}
 
