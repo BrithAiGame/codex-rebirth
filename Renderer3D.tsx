@@ -3,7 +3,7 @@ import React, { useRef, useMemo, useState, useEffect, useLayoutEffect } from 're
 import { useFrame, useThree } from '@react-three/fiber';
 import { Text } from '@react-three/drei';
 import { GameEngine } from './game';
-import { Entity, EntityType, PlayerEntity, EnemyEntity, ProjectileEntity, ItemEntity, BombEntity, RemotePlayerEntity, Room, SkullEntity } from './types';
+import { Entity, EntityType, PlayerEntity, EnemyEntity, ProjectileEntity, ItemEntity, BombEntity, RemotePlayerEntity, Room, SkullEntity, ItemType } from './types';
 import { CONSTANTS } from './constants';
 import * as THREE from 'three';
 import { AssetLoader } from './assets';
@@ -344,16 +344,6 @@ const EntityGroup: React.FC<{ entity: Entity, engine: GameEngine }> = React.memo
 
     const { spriteMatrix, palette } = useMemo(() => getEntityAssetData(entity, engine), [entity.type, (entity as any).itemType, (entity as any).enemyType, engine.characterId]);
     const isPlayerEntity = entity.type === EntityType.PLAYER || entity.type === EntityType.REMOTE_PLAYER;
-    const characterId = entity.type === EntityType.PLAYER ? engine.characterId : (entity as RemotePlayerEntity).characterId;
-    const playerStyle = {
-        alpha: { body: '#14b8a6', armor: '#0f766e', accent: '#99f6e4', core: '#38bdf8' },
-        titan: { body: '#166534', armor: '#14532d', accent: '#86efac', core: '#22c55e' },
-        strider: { body: '#f59e0b', armor: '#a16207', accent: '#fef08a', core: '#f97316' },
-        blaster: { body: '#a855f7', armor: '#7e22ce', accent: '#e9d5ff', core: '#c084fc' },
-        sniper: { body: '#3b82f6', armor: '#1e40af', accent: '#93c5fd', core: '#60a5fa' },
-        swarm: { body: '#ef4444', armor: '#991b1b', accent: '#fecaca', core: '#fb7185' },
-        void: { body: '#1f2937', armor: '#0f172a', accent: '#64748b', core: '#94a3b8' }
-    }[characterId] || { body: '#14b8a6', armor: '#0f766e', accent: '#99f6e4', core: '#38bdf8' };
 
     useFrame((state) => {
         if (groupRef.current) {
@@ -545,6 +535,42 @@ const EntityGroup: React.FC<{ entity: Entity, engine: GameEngine }> = React.memo
 
     if (entity.type === EntityType.ITEM) {
         const item = entity as ItemEntity;
+        if (item.itemType === ItemType.KEY) {
+            return (
+                <group ref={groupRef}>
+                    <mesh castShadow receiveShadow position={[0, 0.15, 0]}>
+                        <torusGeometry args={[0.16, 0.05, 8, 16]} />
+                        <meshStandardMaterial color="#fbbf24" emissive="#f59e0b" emissiveIntensity={0.5} />
+                    </mesh>
+                    <mesh castShadow receiveShadow position={[0.24, 0.12, 0]}>
+                        <boxGeometry args={[0.22, 0.06, 0.08]} />
+                        <meshStandardMaterial color="#fcd34d" emissive="#f59e0b" emissiveIntensity={0.4} />
+                    </mesh>
+                    <mesh castShadow receiveShadow position={[0.34, 0.12, 0]}>
+                        <boxGeometry args={[0.08, 0.12, 0.06]} />
+                        <meshStandardMaterial color="#fcd34d" emissive="#f59e0b" emissiveIntensity={0.4} />
+                    </mesh>
+                </group>
+            );
+        }
+        if (item.itemType === ItemType.BOMB) {
+            return (
+                <group ref={groupRef}>
+                    <mesh castShadow receiveShadow position={[0, 0.15, 0]}>
+                        <sphereGeometry args={[0.18, 10, 10]} />
+                        <meshStandardMaterial color="#111827" emissive="#ef4444" emissiveIntensity={0.35} />
+                    </mesh>
+                    <mesh castShadow receiveShadow position={[0, 0.3, 0]}>
+                        <boxGeometry args={[0.04, 0.12, 0.04]} />
+                        <meshStandardMaterial color="#9ca3af" />
+                    </mesh>
+                    <mesh position={[0, 0.38, 0]}>
+                        <sphereGeometry args={[0.04, 8, 8]} />
+                        <meshStandardMaterial color="#f97316" emissive="#f97316" emissiveIntensity={0.7} />
+                    </mesh>
+                </group>
+            );
+        }
         const cost = item.costHearts || 0;
         const heartCount = Math.max(0, Math.min(cost, 4));
         const heartSpacing = 0.12;

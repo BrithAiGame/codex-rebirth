@@ -1851,7 +1851,7 @@ export default function App() {
             {isInGame && (
                 <>
                     <div className="flex items-baseline gap-2">
-                        <span className="text-amber-500 font-black text-2xl md:text-3xl tracking-tighter">
+                        <span className="text-amber-500 font-black text-2xl md:text-3xl tracking-tighter" style={{ fontFamily: "'GameFontZh', monospace" }}>
                             {t('FLOOR')} {gameStats?.floor || 1} [{(gameStats?.floor || 1) <= 5 ? floorThemeLabel : '???'}]
                         </span>
                     </div>
@@ -1880,6 +1880,12 @@ export default function App() {
                           <AttributePill icon="💥" value={`${knockback}`} title="Knockback" />
                           <AttributePill icon="🔑" value={`${gameStats?.keys ?? 0}`} title="Keys" />
                           <AttributePill icon="💣" value={`${gameStats?.bombs ?? 0}`} title="Bombs" />
+                          <AttributePill icon="⏱️" value={`${(() => {
+                              const total = Math.floor(gameStats?.gameTimeSeconds || 0);
+                              const min = Math.floor(total / 60);
+                              const sec = total % 60;
+                              return `${min}:${sec.toString().padStart(2, '0')}`;
+                          })()}`} title="Time" />
                       </div>
                   )}
                   {isOnlineSession && deadList.length > 0 && (

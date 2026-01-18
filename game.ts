@@ -28,6 +28,7 @@ export class GameEngine {
   floorLevel: number = 1;
   baseSeed: number = 0;
   score: number = 0;
+  gameTimeSeconds: number = 0;
   
   player: PlayerEntity;
   remotePlayers: Map<string, RemotePlayerEntity> = new Map();
@@ -85,6 +86,7 @@ export class GameEngine {
     this.onlineRng = null;
     this.floorLevel = 1;
     this.score = 0;
+    this.gameTimeSeconds = 0;
     this.baseSeed = Math.floor(Math.random() * 1000000); // Initial random seed for the run
     this.player = this.createPlayer(characterId);
     this.loadFloor(1);
@@ -99,6 +101,7 @@ export class GameEngine {
     this.onlineRng = new SeededRNG(baseSeed + 9137);
     this.floorLevel = 1;
     this.score = 0;
+    this.gameTimeSeconds = 0;
     this.baseSeed = baseSeed;
     this.player = this.createPlayer(characterId);
     this.loadFloor(1);
@@ -145,6 +148,26 @@ export class GameEngine {
   makeItemId(kind: string, seed: number, x: number, y: number, extra?: string) {
       const suffix = extra ? `_${extra}` : '';
       return `${kind}_${Math.floor(seed)}_${Math.round(x)}_${Math.round(y)}${suffix}`;
+  }
+
+  ensureRoomLayout(room: Room) {
+      const layout = room.layout;
+      if (layout && layout.length > 0 && layout[0] && layout[0].length > 0) return;
+      const w = CONSTANTS.ROOM_WIDTH;
+      const h = CONSTANTS.ROOM_HEIGHT;
+      const next: number[][] = [];
+      for (let y = 0; y < h; y++) {
+          const row: number[] = [];
+          for (let x = 0; x < w; x++) {
+              if (y === 0 || y === h - 1 || x === 0 || x === w - 1) {
+                  row.push(1);
+              } else {
+                  row.push(0);
+              }
+          }
+          next.push(row);
+      }
+      room.layout = next;
   }
 
   // Calculate geometric room growth based on run seed
@@ -195,6 +218,8 @@ export class GameEngine {
 
     this.currentRoom = room;
     this.roomRevision += 1;
+
+    this.ensureRoomLayout(room);
     
     // Sync clear status for Item Rooms (re-entry logic)
     if (room.type === 'ITEM' && room.itemCollected) {
@@ -991,6 +1016,7 @@ export class GameEngine {
           floor: this.floorLevel,
           themeName: this.floorThemeLabel,
           score: this.score,
+          gameTimeSeconds: this.gameTimeSeconds,
           seed: this.baseSeed,
           items: this.player.inventory.length,
           keys: this.player.keys,
@@ -1059,6 +1085,15 @@ export class GameEngine {
     }
 
     if (this.status !== GameStatus.PLAYING) return;
+
+    if (!this.currentRoom && this.dungeon.length > 0) {
+        const fallback = this.dungeon.find(r => r.type === 'START') || this.dungeon[0];
+        if (fallback) {
+            this.enterRoom(fallback, null);
+        }
+    }
+
+    this.gameTimeSeconds += dt;
 
     if (this.notificationTimer > 0) {
         this.notificationTimer--;
@@ -1133,10 +1168,10 @@ export class GameEngine {
         const clearRoll = shouldSpawnReward
             ? new SeededRNG(this.currentRoom.seed + 5051).next()
             : 1;
-        if (clearRoll < 0.10) {
+        if (clearRoll < 0.20) {
              const cx = CONSTANTS.CANVAS_WIDTH / 2;
              const cy = CONSTANTS.CANVAS_HEIGHT / 2;
-             this.spawnPickup(cx, cy);
+             this.spawnBombPickup(cx, cy);
         }
         
         if (this.currentRoom.type === 'BOSS') {
@@ -1278,6 +1313,7 @@ export class GameEngine {
               damage,
               knockback,
               lifeTime: range,
+              initialRange: range,
               visualZ: 10
           } as ProjectileEntity);
       };
@@ -1325,6 +1361,7 @@ export class GameEngine {
               damage,
               knockback,
               lifeTime: range,
+              initialRange: range,
               visualZ: 10
           } as ProjectileEntity);
       };
@@ -1353,6 +1390,11 @@ export class GameEngine {
       p.x += p.velocity.x;
       p.y += p.velocity.y;
       p.lifeTime -= Math.abs(p.velocity.x) + Math.abs(p.velocity.y); 
+      const dropThreshold = Math.max(30, (p.initialRange ?? p.lifeTime) * 0.25);
+      if (p.lifeTime < dropThreshold) {
+          p.velocity.y += 0.6;
+          p.visualZ = Math.max(0, (p.visualZ ?? 10) - 0.6);
+      }
       if (p.lifeTime <= 0) {
           p.markedForDeletion = true;
           return;
@@ -2048,7 +2090,7 @@ export class GameEngine {
                   this.spawnKey(enemy.x + enemy.w/2, enemy.y + enemy.h/2);
               }
 
-              const bombDropChance = enemy.enemyType === EnemyType.BOSS ? 0.2 : 0.1;
+          const bombDropChance = 0.2;
               const bombRoll = dropRng.next();
               if (bombRoll < bombDropChance) {
                   this.spawnBombPickup(enemy.x + enemy.w/2, enemy.y + enemy.h/2);

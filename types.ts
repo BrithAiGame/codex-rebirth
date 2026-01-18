@@ -164,6 +164,7 @@ export interface ProjectileEntity extends Entity {
   damage: number;
   knockback: number; // Force carried by projectile
   lifeTime: number;
+  initialRange?: number;
   fxOnly?: boolean;
 }
 
