@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { CONSTANTS } from './constants';
 import { SPRITES } from './sprites';
 import { ROOM_THEMES } from './config/themes';
+import { ITEMS, DROPS } from './config/items';
 
 export type SpriteName = keyof typeof SPRITES;
 
@@ -85,6 +86,12 @@ export class AssetLoader {
 
   generateAssets() {
     const P = CONSTANTS.PALETTE;
+    const buildItemPalette = (color: string) => {
+        const base = new THREE.Color(color || P.ITEM_GOLD);
+        const shadow = base.clone().multiplyScalar(0.6);
+        const highlight = base.clone().lerp(new THREE.Color('#ffffff'), 0.45);
+        return ['', `#${base.getHexString()}`, `#${shadow.getHexString()}`, `#${highlight.getHexString()}`];
+    };
 
     const register = (name: string, canvas: HTMLCanvasElement) => {
         this.rawCanvases[name] = canvas;
@@ -253,6 +260,21 @@ export class AssetLoader {
 
     register('ITEM_EYE', this.createCanvas(SPRITES.ITEM_EYE,
       ['', '#fef3c7', '#d97706', '#000000'], CONSTANTS.ITEM_SIZE));
+
+    // Sigil items (dynamic palettes)
+    const sigilSprites = new Set<string>();
+    [...ITEMS, ...DROPS].forEach(item => {
+        if (item.sprite.startsWith('ITEM_SIGIL_')) {
+            sigilSprites.add(item.sprite);
+        }
+    });
+    sigilSprites.forEach(spriteName => {
+        const sprite = SPRITES[spriteName as keyof typeof SPRITES];
+        if (!sprite) return;
+        const config = ITEMS.find(i => i.sprite === spriteName) || DROPS.find(d => d.sprite === spriteName);
+        const palette = buildItemPalette(config?.color || P.ITEM_GOLD);
+        register(spriteName, this.createCanvas(sprite, palette, CONSTANTS.ITEM_SIZE));
+    });
 
     // Pedestal  
     register('PEDESTAL', this.createCanvas(SPRITES.PEDESTAL,

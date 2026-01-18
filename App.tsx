@@ -330,6 +330,7 @@ export default function App() {
   const [localPlayerId, setLocalPlayerId] = useState<string>('');
   const [wsStatus, setWsStatus] = useState<'idle' | 'connecting' | 'open' | 'closed' | 'error'>('idle');
   const [isOnlineSession, setIsOnlineSession] = useState(false);
+  const [itemTooltip, setItemTooltip] = useState<{ name: string; desc: string; x: number; y: number } | null>(null);
   const [deadListVersion, setDeadListVersion] = useState(0);
   const lastFloorBroadcastRef = useRef<number | null>(null);
   const isOnlineSessionRef = useRef(false);
@@ -367,6 +368,16 @@ export default function App() {
   const localDeadRef = useRef(false);
   const deathMarkersRef = useRef<Set<string>>(new Set());
   const bossReviveSentRef = useRef<string | null>(null);
+  const tooltipClamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+  const handleItemTooltip = (e: React.MouseEvent, name: string, desc: string) => {
+      if (!desc) return;
+      const padding = 12;
+      const maxWidth = 260;
+      const maxHeight = 140;
+      const x = tooltipClamp(e.clientX + 16, padding, window.innerWidth - maxWidth - padding);
+      const y = tooltipClamp(e.clientY - 12, padding, window.innerHeight - maxHeight - padding);
+      setItemTooltip({ name, desc, x, y });
+  };
 
   const [settings, setSettings] = useState<Settings>(() => {
     const isMobile = typeof window !== 'undefined' && (window.innerWidth <= 768 || /Mobi|Android/i.test(navigator.userAgent));
@@ -2399,12 +2410,11 @@ export default function App() {
                                    key={idx}
                                    className="aspect-square bg-black border border-gray-700 rounded p-1 flex items-center justify-center relative group hover:border-amber-500 transition-colors"
                                    title={itemDesc ? `${itemName} - ${itemDesc}` : itemName}
+                                   onMouseEnter={(e) => handleItemTooltip(e, itemName, itemDesc)}
+                                   onMouseMove={(e) => handleItemTooltip(e, itemName, itemDesc)}
+                                   onMouseLeave={() => setItemTooltip(null)}
                                >
                                    <SpritePreview spriteName={conf ? conf.sprite : 'ITEM'} assetLoader={uiAssetLoader} size={40} />
-                                   <div className="absolute right-full top-0 mr-2 w-48 bg-black border border-amber-600 p-2 z-50 hidden group-hover:block rounded shadow-xl">
-                                       <div className="text-amber-500 font-bold text-sm">{itemName}</div>
-                                       <div className="text-gray-400 text-xs">{itemDesc}</div>
-                                   </div>
                                </div>
                            );
                        })}
@@ -2481,6 +2491,16 @@ export default function App() {
                   </button>
               </div>
               <VirtualJoystick onMove={(v) => joystickShootRef.current = v} label="SHOOT" color="#ef4444" />
+          </div>
+      )}
+
+      {itemTooltip && (
+          <div
+              className="fixed z-[90] pointer-events-none max-w-[260px] bg-black border border-amber-600 rounded shadow-xl p-2"
+              style={{ left: itemTooltip.x, top: itemTooltip.y }}
+          >
+              <div className="text-amber-500 font-bold text-sm">{itemTooltip.name}</div>
+              <div className="text-gray-400 text-xs">{itemTooltip.desc}</div>
           </div>
       )}
 
