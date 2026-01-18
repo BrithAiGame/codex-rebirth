@@ -154,11 +154,12 @@ interface VoxelMeshProps {
     scaleFactor: number; // Size of the entity in World Units
     opacity?: number;
     flash?: boolean;
+    cropBottomRatio?: number;
 }
 
 const dummy = new THREE.Object3D();
 
-const VoxelMesh: React.FC<VoxelMeshProps> = React.memo(({ spriteMatrix, colors, scaleFactor, opacity = 1, flash = false }) => {
+const VoxelMesh: React.FC<VoxelMeshProps> = React.memo(({ spriteMatrix, colors, scaleFactor, opacity = 1, flash = false, cropBottomRatio = 0 }) => {
     const meshRef = useRef<THREE.InstancedMesh>(null);
     
     // Process Sprite Data into Voxel Positions
@@ -166,6 +167,8 @@ const VoxelMesh: React.FC<VoxelMeshProps> = React.memo(({ spriteMatrix, colors, 
         const data: {x: number, y: number, color: THREE.Color}[] = [];
         const h = spriteMatrix.length;
         const w = spriteMatrix[0].length;
+        const cropRatio = Math.max(0, Math.min(0.9, cropBottomRatio));
+        const cropRowLimit = Math.floor(h * (1 - cropRatio));
         
         // Center offsets
         const ox = w / 2;
@@ -173,6 +176,7 @@ const VoxelMesh: React.FC<VoxelMeshProps> = React.memo(({ spriteMatrix, colors, 
 
         spriteMatrix.forEach((row, r) => {
             row.forEach((pixel, c) => {
+                if (cropRatio > 0 && r >= cropRowLimit) return;
                 if (pixel > 0 && colors[pixel]) {
                     // Invert Y because array 0 is top
                     const y = (h - 1 - r); 
@@ -189,7 +193,12 @@ const VoxelMesh: React.FC<VoxelMeshProps> = React.memo(({ spriteMatrix, colors, 
             });
         });
         return data;
-    }, [spriteMatrix, colors, flash]);
+    }, [spriteMatrix, colors, flash, cropBottomRatio]);
+
+    const minVoxelY = useMemo(() => {
+        if (!voxels.length) return 0;
+        return voxels.reduce((min, v) => Math.min(min, v.y), voxels[0].y);
+    }, [voxels]);
 
     useMemo(() => {
         if (meshRef.current) {
@@ -206,9 +215,11 @@ const VoxelMesh: React.FC<VoxelMeshProps> = React.memo(({ spriteMatrix, colors, 
         // The sprite is 16 pixels wide.
         // So 1 voxel = scaleFactor / 16.
         const voxelSize = scaleFactor / 16;
+        const h = spriteMatrix.length;
+        const yOffset = (-h / 2) - minVoxelY;
         
         voxels.forEach((v, i) => {
-            dummy.position.set(v.x * voxelSize, v.y * voxelSize, 0);
+            dummy.position.set(v.x * voxelSize, (v.y + yOffset) * voxelSize, 0);
             dummy.scale.set(voxelSize, voxelSize, voxelSize * 2); // Thicker Z for solidity
             dummy.updateMatrix();
             meshRef.current!.setMatrixAt(i, dummy.matrix);
@@ -217,7 +228,7 @@ const VoxelMesh: React.FC<VoxelMeshProps> = React.memo(({ spriteMatrix, colors, 
         
         meshRef.current.instanceMatrix.needsUpdate = true;
         if (meshRef.current.instanceColor) meshRef.current.instanceColor.needsUpdate = true;
-    }, [voxels, scaleFactor]);
+    }, [voxels, scaleFactor, minVoxelY, spriteMatrix.length]);
 
     return (
         <instancedMesh ref={meshRef} args={[undefined, undefined, voxels.length]} castShadow receiveShadow>
@@ -526,8 +537,9 @@ const EntityGroup: React.FC<{ entity: Entity, engine: GameEngine }> = React.memo
                 <VoxelMesh 
                     spriteMatrix={spriteMatrix} 
                     colors={palette} 
-                    scaleFactor={width} 
+                    scaleFactor={width * 0.7} 
                     flash={!!isFlash} 
+                    cropBottomRatio={0.4}
                 />
             </group>
         );
