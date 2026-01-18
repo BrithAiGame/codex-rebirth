@@ -146,7 +146,7 @@ const VirtualJoystick: React.FC<JoystickProps> = ({ onMove, color = 'white', lab
 };
 
 // Utils
-type ShotMeta = Pick<GameStats, 'damage' | 'fireRate' | 'shotSpeed' | 'range' | 'knockback' | 'shotSpread' | 'bulletScale'>;
+type ShotMeta = Pick<GameStats, 'damage' | 'fireRate' | 'shotSpeed' | 'range' | 'knockback' | 'shotSpread' | 'bulletScale' | 'bulletShape' | 'shotMode' | 'pierce' | 'bounce' | 'homing' | 'explosive' | 'chain' | 'gravityScale' | 'chargeRate' | 'impactDamage'>;
 type NetInput = { move: Vector2; shoot: Vector2 | null; bomb: boolean; pause: boolean; restart: boolean; shotMeta?: ShotMeta };
 type LocalInput = NetInput & { shotMetaKey: string };
 
@@ -213,10 +213,20 @@ const GameLoop: React.FC<{ engine: GameEngine, input: React.MutableRefObject<Inp
                             range: engine.player.stats.range,
                             knockback: engine.player.stats.knockback,
                             shotSpread: engine.player.stats.shotSpread,
-                            bulletScale: engine.player.stats.bulletScale
+                            bulletScale: engine.player.stats.bulletScale,
+                            bulletShape: engine.player.stats.bulletShape,
+                            shotMode: engine.player.stats.shotMode,
+                            pierce: engine.player.stats.pierce,
+                            bounce: engine.player.stats.bounce,
+                            homing: engine.player.stats.homing,
+                            explosive: engine.player.stats.explosive,
+                            chain: engine.player.stats.chain,
+                            gravityScale: engine.player.stats.gravityScale,
+                            chargeRate: engine.player.stats.chargeRate,
+                            impactDamage: engine.player.stats.impactDamage
                         } : undefined;
                         const shotMetaKey = shotMeta
-                            ? `${shotMeta.damage}|${shotMeta.fireRate}|${shotMeta.shotSpeed}|${shotMeta.range}|${shotMeta.knockback}|${shotMeta.shotSpread}|${shotMeta.bulletScale}`
+                            ? `${shotMeta.damage}|${shotMeta.fireRate}|${shotMeta.shotSpeed}|${shotMeta.range}|${shotMeta.knockback}|${shotMeta.shotSpread}|${shotMeta.bulletScale}|${shotMeta.bulletShape}|${shotMeta.shotMode}|${shotMeta.pierce}|${shotMeta.bounce}|${shotMeta.homing}|${shotMeta.explosive}|${shotMeta.chain}|${shotMeta.gravityScale}|${shotMeta.chargeRate}|${shotMeta.impactDamage}`
                             : '';
                         latestInput.current = { move, shoot, bomb: bombSafe, pause, restart, shotMeta, shotMetaKey };
                         engine.update({ move, shoot, restart, pause, bomb: bombSafe }, frameInterval / 1000);
@@ -340,6 +350,7 @@ export default function App() {
   const serverTickTimeRef = useRef(0);
   const remotePrevPosRef = useRef<Record<string, { x: number; y: number }>>({});
   const remoteFireCooldownRef = useRef<Record<string, number>>({});
+  const remoteChargeRef = useRef<Record<string, { timer: number; dir: Vector2 | null }>>({});
   const remoteShootDirRef = useRef<Record<string, Vector2>>({});
   const remoteLastMoveRef = useRef<Record<string, number>>({});
   const inputBufferRef = useRef<Map<number, Map<string, NetInput>>>(new Map());
@@ -759,7 +770,17 @@ export default function App() {
                       range: baseStats.range,
                       knockback: baseStats.knockback,
                       shotSpread: baseStats.shotSpread,
-                      bulletScale: baseStats.bulletScale
+                      bulletScale: baseStats.bulletScale,
+                      bulletShape: baseStats.bulletShape,
+                      shotMode: baseStats.shotMode,
+                      pierce: baseStats.pierce,
+                      bounce: baseStats.bounce,
+                      homing: baseStats.homing,
+                      explosive: baseStats.explosive,
+                      chain: baseStats.chain,
+                      gravityScale: baseStats.gravityScale,
+                      chargeRate: baseStats.chargeRate,
+                      impactDamage: baseStats.impactDamage
                   };
                   const move = normalizeMove(input.move);
                   sim.x = clamp(sim.x + move.x * baseStats.speed, 0, CONSTANTS.CANVAS_WIDTH);
@@ -771,7 +792,14 @@ export default function App() {
                       const len = Math.hypot(shoot.x, shoot.y) || 1;
                       const dir = { x: shoot.x / len, y: shoot.y / len };
                       remoteShootDirRef.current[p.id] = dir;
-                      if (cd <= 0) {
+                      const shotMode = stats.shotMode ?? 'normal';
+                      if (shotMode === 'charge') {
+                          const state = remoteChargeRef.current[p.id] ?? { timer: 0, dir: null };
+                          state.timer = Math.min(1.4, state.timer + (1 / 60) * Math.max(0.2, stats.chargeRate ?? 1));
+                          state.dir = dir;
+                          remoteChargeRef.current[p.id] = state;
+                          remoteFireCooldownRef.current[p.id] = Math.max(0, cd - 1);
+                      } else if (cd <= 0) {
                           const spawnX = sim.x + sim.w / 2;
                           const spawnY = sim.y + sim.h / 2;
                           engineRef.current?.spawnRemoteProjectile(spawnX, spawnY, dir, stats);
@@ -780,7 +808,29 @@ export default function App() {
                           remoteFireCooldownRef.current[p.id] = cd - 1;
                       }
                   } else {
-                      remoteFireCooldownRef.current[p.id] = Math.max(0, cd - 1);
+                      const shotMode = stats.shotMode ?? 'normal';
+                      if (shotMode === 'charge') {
+                          const state = remoteChargeRef.current[p.id];
+                          if (state && state.timer > 0 && cd <= 0 && state.dir) {
+                              const chargeRatio = Math.min(1, state.timer / 0.9);
+                              const chargedStats = {
+                                  ...stats,
+                                  damage: stats.damage * (1 + chargeRatio * 1.5),
+                                  range: stats.range * (1 + chargeRatio * 0.6),
+                                  shotSpeed: stats.shotSpeed * (1 + chargeRatio * 0.4),
+                                  bulletScale: stats.bulletScale + chargeRatio * 0.4
+                              };
+                              const spawnX = sim.x + sim.w / 2;
+                              const spawnY = sim.y + sim.h / 2;
+                              engineRef.current?.spawnRemoteProjectile(spawnX, spawnY, state.dir, chargedStats);
+                              remoteFireCooldownRef.current[p.id] = Math.max(10, Math.round(stats.fireRate * (1.2 + chargeRatio)));
+                          } else {
+                              remoteFireCooldownRef.current[p.id] = Math.max(0, cd - 1);
+                          }
+                          remoteChargeRef.current[p.id] = { timer: 0, dir: null };
+                      } else {
+                          remoteFireCooldownRef.current[p.id] = Math.max(0, cd - 1);
+                      }
                   }
 
                   if (input.bomb) {
@@ -1177,7 +1227,17 @@ export default function App() {
                   range: baseStats.range,
                   knockback: baseStats.knockback,
                   shotSpread: baseStats.shotSpread,
-                  bulletScale: baseStats.bulletScale
+                  bulletScale: baseStats.bulletScale,
+                  bulletShape: baseStats.bulletShape,
+                  shotMode: baseStats.shotMode,
+                  pierce: baseStats.pierce,
+                  bounce: baseStats.bounce,
+                  homing: baseStats.homing,
+                  explosive: baseStats.explosive,
+                  chain: baseStats.chain,
+                  gravityScale: baseStats.gravityScale,
+                  chargeRate: baseStats.chargeRate,
+                  impactDamage: baseStats.impactDamage
               };
               const move = normalizeMove(input.move);
               sim.x = clamp(sim.x + move.x * baseStats.speed, 0, CONSTANTS.CANVAS_WIDTH);
@@ -1189,7 +1249,14 @@ export default function App() {
                   const len = Math.hypot(shoot.x, shoot.y) || 1;
                   const dir = { x: shoot.x / len, y: shoot.y / len };
                   remoteShootDirRef.current[playerId] = dir;
-                  if (cd <= 0) {
+                  const shotMode = stats.shotMode ?? 'normal';
+                  if (shotMode === 'charge') {
+                      const state = remoteChargeRef.current[playerId] ?? { timer: 0, dir: null };
+                      state.timer = Math.min(1.4, state.timer + (1 / 60) * Math.max(0.2, stats.chargeRate ?? 1));
+                      state.dir = dir;
+                      remoteChargeRef.current[playerId] = state;
+                      remoteFireCooldownRef.current[playerId] = Math.max(0, cd - 1);
+                  } else if (cd <= 0) {
                       const spawnX = sim.x + sim.w / 2;
                       const spawnY = sim.y + sim.h / 2;
                       engineRef.current?.spawnRemoteProjectile(spawnX, spawnY, dir, stats);
@@ -1198,7 +1265,29 @@ export default function App() {
                       remoteFireCooldownRef.current[playerId] = cd - 1;
                   }
               } else {
-              remoteFireCooldownRef.current[playerId] = Math.max(0, cd - 1);
+                  const shotMode = stats.shotMode ?? 'normal';
+                  if (shotMode === 'charge') {
+                      const state = remoteChargeRef.current[playerId];
+                      if (state && state.timer > 0 && cd <= 0 && state.dir) {
+                          const chargeRatio = Math.min(1, state.timer / 0.9);
+                          const chargedStats = {
+                              ...stats,
+                              damage: stats.damage * (1 + chargeRatio * 1.5),
+                              range: stats.range * (1 + chargeRatio * 0.6),
+                              shotSpeed: stats.shotSpeed * (1 + chargeRatio * 0.4),
+                              bulletScale: stats.bulletScale + chargeRatio * 0.4
+                          };
+                          const spawnX = sim.x + sim.w / 2;
+                          const spawnY = sim.y + sim.h / 2;
+                          engineRef.current?.spawnRemoteProjectile(spawnX, spawnY, state.dir, chargedStats);
+                          remoteFireCooldownRef.current[playerId] = Math.max(10, Math.round(stats.fireRate * (1.2 + chargeRatio)));
+                      } else {
+                          remoteFireCooldownRef.current[playerId] = Math.max(0, cd - 1);
+                      }
+                      remoteChargeRef.current[playerId] = { timer: 0, dir: null };
+                  } else {
+                      remoteFireCooldownRef.current[playerId] = Math.max(0, cd - 1);
+                  }
           }
 
           if (input.bomb) {
@@ -2303,12 +2392,18 @@ export default function App() {
                    <div className="grid grid-cols-4 gap-2">
                        {gameStats && gameStats.inventory && gameStats.inventory.map((itemType, idx) => {
                            const conf = ITEMS.find(i => i.type === itemType) || DROPS.find(d => d.type === itemType);
+                           const itemName = conf ? t(conf.nameKey) : String(itemType);
+                           const itemDesc = conf ? t(conf.descKey) : '';
                            return (
-                               <div key={idx} className="aspect-square bg-black border border-gray-700 rounded p-1 flex items-center justify-center relative group hover:border-amber-500 transition-colors">
+                               <div
+                                   key={idx}
+                                   className="aspect-square bg-black border border-gray-700 rounded p-1 flex items-center justify-center relative group hover:border-amber-500 transition-colors"
+                                   title={itemDesc ? `${itemName} - ${itemDesc}` : itemName}
+                               >
                                    <SpritePreview spriteName={conf ? conf.sprite : 'ITEM'} assetLoader={uiAssetLoader} size={40} />
                                    <div className="absolute right-full top-0 mr-2 w-48 bg-black border border-amber-600 p-2 z-50 hidden group-hover:block rounded shadow-xl">
-                                       <div className="text-amber-500 font-bold text-sm">{conf ? t(conf.nameKey) : itemType}</div>
-                                       <div className="text-gray-400 text-xs">{conf ? t(conf.descKey) : ''}</div>
+                                       <div className="text-amber-500 font-bold text-sm">{itemName}</div>
+                                       <div className="text-gray-400 text-xs">{itemDesc}</div>
                                    </div>
                                </div>
                            );
@@ -2353,9 +2448,15 @@ export default function App() {
           </div>
           <div className="flex-1 p-2 overflow-x-auto whitespace-nowrap flex items-center gap-2 custom-scrollbar">
                {gameStats && gameStats.inventory && gameStats.inventory.length > 0 ? gameStats.inventory.map((itemType, idx) => {
-                   const conf = ITEMS.find(i => i.type === itemType);
+                   const conf = ITEMS.find(i => i.type === itemType) || DROPS.find(d => d.type === itemType);
+                   const itemName = conf ? t(conf.nameKey) : String(itemType);
+                   const itemDesc = conf ? t(conf.descKey) : '';
                    return (
-                       <div key={idx} className="inline-block w-16 h-16 bg-black border border-gray-700 rounded flex-shrink-0 flex items-center justify-center">
+                       <div
+                           key={idx}
+                           className="inline-block w-16 h-16 bg-black border border-gray-700 rounded flex-shrink-0 flex items-center justify-center"
+                           title={itemDesc ? `${itemName} - ${itemDesc}` : itemName}
+                       >
                            <SpritePreview spriteName={conf ? conf.sprite : 'ITEM'} assetLoader={uiAssetLoader} size={48} />
                        </div>
                    );

@@ -60,8 +60,61 @@ export enum ItemType {
   GLASS_CANNON = 'GLASS_CANNON', // New Item
   HEART_PICKUP = 'HEART_PICKUP',
   KEY = 'KEY',
-  BOMB = 'BOMB'
+  BOMB = 'BOMB',
+  PENTA_SHOT = 'PENTA_SHOT',
+  HEPTA_SHOT = 'HEPTA_SHOT',
+  OCTO_SHOT = 'OCTO_SHOT',
+  NOVA_SHOT = 'NOVA_SHOT',
+  PIERCING_NEEDLE = 'PIERCING_NEEDLE',
+  DRILL_CORE = 'DRILL_CORE',
+  RICOCHET_RUNE = 'RICOCHET_RUNE',
+  MIRROR_CORE = 'MIRROR_CORE',
+  HOMING_EYE = 'HOMING_EYE',
+  SEEKER_GEM = 'SEEKER_GEM',
+  BLAST_CAP = 'BLAST_CAP',
+  HELLFIRE_ORB = 'HELLFIRE_ORB',
+  CHAIN_RELAY = 'CHAIN_RELAY',
+  STORM_RELAY = 'STORM_RELAY',
+  GRAVITY_GLOVE = 'GRAVITY_GLOVE',
+  ANCHOR_HEART = 'ANCHOR_HEART',
+  LASER_CRYSTAL = 'LASER_CRYSTAL',
+  CHARGE_COIL = 'CHARGE_COIL',
+  OVERCLOCK_CORE = 'OVERCLOCK_CORE',
+  CUBE_CORE = 'CUBE_CORE',
+  SHARD_CORE = 'SHARD_CORE',
+  RING_CORE = 'RING_CORE',
+  BOLT_CORE = 'BOLT_CORE',
+  LUMEN_SEED = 'LUMEN_SEED',
+  SUNSTONE = 'SUNSTONE',
+  ICE_CORE = 'ICE_CORE',
+  QUICKSILVER = 'QUICKSILVER',
+  ION_BATTERY = 'ION_BATTERY',
+  FOCUS_LENS = 'FOCUS_LENS',
+  SPIRAL_SPRING = 'SPIRAL_SPRING',
+  BULLET_BLOOM = 'BULLET_BLOOM',
+  NEEDLE_POINT = 'NEEDLE_POINT',
+  RAZOR_EDGE = 'RAZOR_EDGE',
+  HEAVY_GAUNTLET = 'HEAVY_GAUNTLET',
+  WIND_GUST = 'WIND_GUST',
+  DRUM_MAG = 'DRUM_MAG',
+  CRESCENT_SIGIL = 'CRESCENT_SIGIL',
+  COMET_TAIL = 'COMET_TAIL',
+  SHOCK_NODE = 'SHOCK_NODE',
+  PLASMA_RING = 'PLASMA_RING',
+  METEOR_CORE = 'METEOR_CORE',
+  STARFORGE = 'STARFORGE',
+  VOID_PRISM = 'VOID_PRISM',
+  BLOOD_VIAL = 'BLOOD_VIAL',
+  HASTE_CHIP = 'HASTE_CHIP',
+  FROST_COIL = 'FROST_COIL',
+  THUNDER_FUSE = 'THUNDER_FUSE',
+  PHASE_LENS = 'PHASE_LENS',
+  SPLITTER_MATRIX = 'SPLITTER_MATRIX',
+  SERPENT_SIGIL = 'SERPENT_SIGIL'
 }
+
+export type BulletShape = 'orb' | 'cube' | 'shard' | 'ring' | 'bolt' | 'laser';
+export type ShotMode = 'normal' | 'laser' | 'charge';
 
 export enum Language {
   ZH_CN = 'zh-CN',
@@ -107,6 +160,16 @@ export interface Stats {
   shotSpread: number; // 1 = normal, 3 = triple, 4 = quad
   bulletScale: number; // Multiplier for size
   knockback: number; // New Stat: Force of impact
+  bulletShape: BulletShape;
+  shotMode: ShotMode;
+  pierce: number;
+  bounce: number;
+  homing: number;
+  explosive: number;
+  chain: number;
+  gravityScale: number;
+  chargeRate: number;
+  impactDamage: number;
 }
 
 export interface Rect {
@@ -166,6 +229,16 @@ export interface ProjectileEntity extends Entity {
   lifeTime: number;
   initialRange?: number;
   fxOnly?: boolean;
+  shape?: BulletShape;
+  pierce?: number;
+  bounce?: number;
+  homing?: number;
+  explosive?: number;
+  chain?: number;
+  gravityScale?: number;
+  impactDamage?: number;
+  laserLength?: number;
+  chargeLevel?: number;
 }
 
 export interface ItemEntity extends Entity {

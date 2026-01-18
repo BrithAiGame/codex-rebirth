@@ -245,6 +245,13 @@ const VoxelMesh: React.FC<VoxelMeshProps> = React.memo(({ spriteMatrix, colors, 
 
 // --- HELPER: GET ASSET DATA ---
 
+const buildItemPalette = (color: string) => {
+    const base = new THREE.Color(color);
+    const shadow = base.clone().multiplyScalar(0.6);
+    const highlight = base.clone().lerp(new THREE.Color('#ffffff'), 0.45);
+    return ['', `#${base.getHexString()}`, `#${shadow.getHexString()}`, `#${highlight.getHexString()}`];
+};
+
 const getEntityAssetData = (e: Entity, engine: GameEngine) => {
     let spriteMatrix = SPRITES.PLAYER; // Default
     let palette = ['', '#fff', '#ccc', '#888'];
@@ -325,6 +332,7 @@ const getEntityAssetData = (e: Entity, engine: GameEngine) => {
             else if (itemConfig.sprite === 'ITEM_LENS') palette = ['', '#60a5fa', '#1e3a8a', '#93c5fd'];
             else if (itemConfig.sprite === 'ITEM_EYE') palette = ['', '#fef3c7', '#d97706', '#000000'];
             else if (itemConfig.sprite === 'HEART') palette = ['', P.HEART_MAIN, P.HEART_SHADOW, '#ffffff'];
+            else if (itemConfig.sprite.startsWith('ITEM_SIGIL_')) palette = buildItemPalette(itemConfig.color);
             else palette = ['', P.ITEM_GOLD, P.ITEM_SHADOW, '#ffffff'];
         }
     } else if (e.type === EntityType.PEDESTAL) {
@@ -547,6 +555,8 @@ const EntityGroup: React.FC<{ entity: Entity, engine: GameEngine }> = React.memo
 
     if (entity.type === EntityType.ITEM) {
         const item = entity as ItemEntity;
+        const itemConfig = ITEMS.find(i => i.type === item.itemType) || DROPS.find(d => d.type === item.itemType);
+        const glowColor = itemConfig?.glow;
         if (item.itemType === ItemType.KEY) {
             return (
                 <group ref={groupRef}>
@@ -597,6 +607,9 @@ const EntityGroup: React.FC<{ entity: Entity, engine: GameEngine }> = React.memo
                         flash={!!isFlash} 
                     />
                 </group>
+                {glowColor && (
+                    <pointLight color={glowColor} intensity={1.6} distance={2.2} decay={2} />
+                )}
                 {heartCount > 0 && (
                     <group ref={itemHeartsRef}>
                         {Array.from({ length: heartCount }).map((_, i) => (
@@ -624,15 +637,32 @@ const EntityGroup: React.FC<{ entity: Entity, engine: GameEngine }> = React.memo
 });
 
 const ProjectileField: React.FC<{ engine: GameEngine }> = React.memo(({ engine }) => {
-    const friendlyRef = useRef<THREE.InstancedMesh>(null);
+    const orbRef = useRef<THREE.InstancedMesh>(null);
+    const cubeRef = useRef<THREE.InstancedMesh>(null);
+    const shardRef = useRef<THREE.InstancedMesh>(null);
+    const ringRef = useRef<THREE.InstancedMesh>(null);
+    const boltRef = useRef<THREE.InstancedMesh>(null);
+    const laserRef = useRef<THREE.InstancedMesh>(null);
     const enemyRef = useRef<THREE.InstancedMesh>(null);
     const dummy = useMemo(() => new THREE.Object3D(), []);
-    const geometry = useMemo(() => new THREE.SphereGeometry(0.5, 6, 6), []);
+    const orbGeom = useMemo(() => new THREE.SphereGeometry(0.5, 6, 6), []);
+    const cubeGeom = useMemo(() => new THREE.BoxGeometry(0.9, 0.9, 0.9), []);
+    const shardGeom = useMemo(() => new THREE.OctahedronGeometry(0.6, 0), []);
+    const ringGeom = useMemo(() => new THREE.TorusGeometry(0.4, 0.12, 8, 16), []);
+    const boltGeom = useMemo(() => new THREE.ConeGeometry(0.5, 1.2, 6), []);
+    const laserGeom = useMemo(() => new THREE.CylinderGeometry(0.25, 0.25, 1.6, 6, 1, true), []);
     const friendlyMat = useMemo(() => new THREE.MeshBasicMaterial({ color: CONSTANTS.COLORS.PROJECTILE_FRIENDLY, toneMapped: false }), []);
     const enemyMat = useMemo(() => new THREE.MeshBasicMaterial({ color: CONSTANTS.COLORS.PROJECTILE_ENEMY, toneMapped: false }), []);
+    const MAX_FRIENDLY = 600;
+    const MAX_ENEMY = 900;
 
     useFrame(() => {
-        let friendlyCount = 0;
+        let orbCount = 0;
+        let cubeCount = 0;
+        let shardCount = 0;
+        let ringCount = 0;
+        let boltCount = 0;
+        let laserCount = 0;
         let enemyCount = 0;
         const entities = engine.entities as Entity[];
 
@@ -649,27 +679,68 @@ const ProjectileField: React.FC<{ engine: GameEngine }> = React.memo(({ engine }
             if (p.visualZ) y += p.visualZ / TILE_SIZE;
 
             dummy.position.set(x, y, z);
-            dummy.scale.set(width, width, width * 1.1);
-            dummy.updateMatrix();
+            dummy.rotation.set(0, 0, 0);
 
-            if (p.ownerId === 'player') {
-                if (friendlyCount < MAX_PROJECTILE_INSTANCES && friendlyRef.current) {
-                    friendlyRef.current.setMatrixAt(friendlyCount, dummy.matrix);
-                    friendlyCount++;
-                }
+            const shape = p.shape || 'orb';
+            const angle = Math.atan2(p.velocity.y, p.velocity.x);
+
+            if (shape === 'laser') {
+                const length = Math.max(0.9, Math.min(3, p.laserLength ?? width * 2.4));
+                dummy.scale.set(width * 0.7, length, width * 0.7);
+                dummy.rotation.set(0, -angle, Math.PI / 2);
+            } else if (shape === 'bolt') {
+                dummy.scale.set(width * 0.9, width * 1.4, width * 0.9);
+                dummy.rotation.set(0, -angle, Math.PI / 2);
             } else {
-                if (enemyCount < MAX_PROJECTILE_INSTANCES && enemyRef.current) {
-                    enemyRef.current.setMatrixAt(enemyCount, dummy.matrix);
-                    enemyCount++;
+                dummy.scale.set(width, width, width);
+                if (shape === 'ring') {
+                    dummy.rotation.set(Math.PI / 2, 0, 0);
                 }
             }
 
+            dummy.updateMatrix();
+
+            if (p.ownerId !== 'player') {
+                if (enemyCount < MAX_ENEMY && enemyRef.current) {
+                    enemyRef.current.setMatrixAt(enemyCount, dummy.matrix);
+                    enemyCount++;
+                }
+                continue;
+            }
+
+            if (shape === 'cube' && cubeRef.current && cubeCount < MAX_FRIENDLY) {
+                cubeRef.current.setMatrixAt(cubeCount, dummy.matrix);
+                cubeCount++;
+            } else if (shape === 'shard' && shardRef.current && shardCount < MAX_FRIENDLY) {
+                shardRef.current.setMatrixAt(shardCount, dummy.matrix);
+                shardCount++;
+            } else if (shape === 'ring' && ringRef.current && ringCount < MAX_FRIENDLY) {
+                ringRef.current.setMatrixAt(ringCount, dummy.matrix);
+                ringCount++;
+            } else if (shape === 'bolt' && boltRef.current && boltCount < MAX_FRIENDLY) {
+                boltRef.current.setMatrixAt(boltCount, dummy.matrix);
+                boltCount++;
+            } else if (shape === 'laser' && laserRef.current && laserCount < MAX_FRIENDLY) {
+                laserRef.current.setMatrixAt(laserCount, dummy.matrix);
+                laserCount++;
+            } else if (orbRef.current && orbCount < MAX_FRIENDLY) {
+                orbRef.current.setMatrixAt(orbCount, dummy.matrix);
+                orbCount++;
+            }
         }
 
-        if (friendlyRef.current) {
-            friendlyRef.current.count = friendlyCount;
-            friendlyRef.current.instanceMatrix.needsUpdate = true;
-        }
+        const update = (ref: React.MutableRefObject<THREE.InstancedMesh | null>, count: number) => {
+            if (!ref.current) return;
+            ref.current.count = count;
+            ref.current.instanceMatrix.needsUpdate = true;
+        };
+
+        update(orbRef, orbCount);
+        update(cubeRef, cubeCount);
+        update(shardRef, shardCount);
+        update(ringRef, ringCount);
+        update(boltRef, boltCount);
+        update(laserRef, laserCount);
         if (enemyRef.current) {
             enemyRef.current.count = enemyCount;
             enemyRef.current.instanceMatrix.needsUpdate = true;
@@ -678,8 +749,13 @@ const ProjectileField: React.FC<{ engine: GameEngine }> = React.memo(({ engine }
 
     return (
         <group>
-            <instancedMesh ref={friendlyRef} args={[geometry, friendlyMat, MAX_PROJECTILE_INSTANCES]} frustumCulled={false} />
-            <instancedMesh ref={enemyRef} args={[geometry, enemyMat, MAX_PROJECTILE_INSTANCES]} frustumCulled={false} />
+            <instancedMesh ref={orbRef} args={[orbGeom, friendlyMat, MAX_FRIENDLY]} frustumCulled={false} />
+            <instancedMesh ref={cubeRef} args={[cubeGeom, friendlyMat, MAX_FRIENDLY]} frustumCulled={false} />
+            <instancedMesh ref={shardRef} args={[shardGeom, friendlyMat, MAX_FRIENDLY]} frustumCulled={false} />
+            <instancedMesh ref={ringRef} args={[ringGeom, friendlyMat, MAX_FRIENDLY]} frustumCulled={false} />
+            <instancedMesh ref={boltRef} args={[boltGeom, friendlyMat, MAX_FRIENDLY]} frustumCulled={false} />
+            <instancedMesh ref={laserRef} args={[laserGeom, friendlyMat, MAX_FRIENDLY]} frustumCulled={false} />
+            <instancedMesh ref={enemyRef} args={[orbGeom, enemyMat, MAX_ENEMY]} frustumCulled={false} />
         </group>
     );
 });

@@ -28,7 +28,17 @@ export const CHARACTERS: CharacterConfig[] = [
       range: 400,
       shotSpread: 1,
       bulletScale: 0.6,
-      knockback: 1
+      knockback: 1,
+      bulletShape: 'orb',
+      shotMode: 'normal',
+      pierce: 0,
+      bounce: 0,
+      homing: 0,
+      explosive: 0,
+      chain: 0,
+      gravityScale: 0,
+      chargeRate: 1,
+      impactDamage: 0
     }
   },
   {
@@ -47,7 +57,17 @@ export const CHARACTERS: CharacterConfig[] = [
       range: 350,
       shotSpread: 1,
       bulletScale: 0.6,
-      knockback: 2.0 // High Knockback
+      knockback: 2.0, // High Knockback
+      bulletShape: 'orb',
+      shotMode: 'normal',
+      pierce: 0,
+      bounce: 0,
+      homing: 0,
+      explosive: 0,
+      chain: 0,
+      gravityScale: 0,
+      chargeRate: 1,
+      impactDamage: 0
     }
   },
   {
@@ -66,7 +86,17 @@ export const CHARACTERS: CharacterConfig[] = [
       range: 300, // Short range
       shotSpread: 1,
       bulletScale: 0.6,
-      knockback: 0.5
+      knockback: 0.5,
+      bulletShape: 'orb',
+      shotMode: 'normal',
+      pierce: 0,
+      bounce: 0,
+      homing: 0,
+      explosive: 0,
+      chain: 0,
+      gravityScale: 0,
+      chargeRate: 1,
+      impactDamage: 0
     }
   },
   {
@@ -85,7 +115,17 @@ export const CHARACTERS: CharacterConfig[] = [
       range: 350,
       shotSpread: 3, // Triple Shot!
       bulletScale: 0.6,
-      knockback: 1.0
+      knockback: 1.0,
+      bulletShape: 'orb',
+      shotMode: 'normal',
+      pierce: 0,
+      bounce: 0,
+      homing: 0,
+      explosive: 0,
+      chain: 0,
+      gravityScale: 0,
+      chargeRate: 1,
+      impactDamage: 0
     }
   },
   {
@@ -104,7 +144,17 @@ export const CHARACTERS: CharacterConfig[] = [
       range: 800, // Sniper range
       shotSpread: 1,
       bulletScale: 0.6,
-      knockback: 1.5
+      knockback: 1.5,
+      bulletShape: 'orb',
+      shotMode: 'normal',
+      pierce: 0,
+      bounce: 0,
+      homing: 0,
+      explosive: 0,
+      chain: 0,
+      gravityScale: 0,
+      chargeRate: 1,
+      impactDamage: 0
     }
   },
   {
@@ -123,7 +173,17 @@ export const CHARACTERS: CharacterConfig[] = [
       range: 300,
       shotSpread: 4, // ...but Quad Shot
       bulletScale: 0.6,
-      knockback: 0.2
+      knockback: 0.2,
+      bulletShape: 'orb',
+      shotMode: 'normal',
+      pierce: 0,
+      bounce: 0,
+      homing: 0,
+      explosive: 0,
+      chain: 0,
+      gravityScale: 0,
+      chargeRate: 1,
+      impactDamage: 0
     }
   },
   {
@@ -142,7 +202,17 @@ export const CHARACTERS: CharacterConfig[] = [
       range: 500,
       shotSpread: 1,
       bulletScale: 0.6,
-      knockback: 3.0 // Massive push
+      knockback: 3.0, // Massive push
+      bulletShape: 'orb',
+      shotMode: 'normal',
+      pierce: 0,
+      bounce: 0,
+      homing: 0,
+      explosive: 0,
+      chain: 0,
+      gravityScale: 0,
+      chargeRate: 1,
+      impactDamage: 0
     }
   }
 ];

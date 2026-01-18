@@ -4,6 +4,45 @@
 // 2: Secondary / Shadow
 // 3: Highlight
 
+const hashSeed = (value: string) => {
+  let h = 2166136261;
+  for (let i = 0; i < value.length; i += 1) {
+    h ^= value.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+};
+
+const makeSigilSprite = (seed: string, density: number = 0.38) => {
+  const size = 16;
+  const grid: number[][] = Array.from({ length: size }, () => Array(size).fill(0));
+  let state = hashSeed(seed);
+  const rand = () => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 4294967296;
+  };
+  for (let y = 2; y < size - 2; y += 1) {
+    for (let x = 0; x < size / 2; x += 1) {
+      const r = rand();
+      if (r < density) {
+        let v = 1;
+        if (r < density * 0.35) v = 2;
+        if (r < density * 0.15) v = 3;
+        grid[y][x] = v;
+        grid[y][size - 1 - x] = v;
+      }
+    }
+  }
+  const cx = Math.floor(size / 2);
+  const cy = Math.floor(size / 2);
+  grid[cy][cx] = 3;
+  grid[cy - 1][cx] = 2;
+  grid[cy + 1][cx] = 2;
+  grid[cy][cx - 1] = 2;
+  grid[cy][cx + 1] = 2;
+  return grid;
+};
+
 export const SPRITES = {
   // Irregular rounded brick wall
   WALL: [
@@ -1322,4 +1361,54 @@ export const SPRITES = {
     [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
     [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
   ],
+  ITEM_SIGIL_PENTA: makeSigilSprite('penta'),
+  ITEM_SIGIL_HEPTA: makeSigilSprite('hepta'),
+  ITEM_SIGIL_OCTO: makeSigilSprite('octo'),
+  ITEM_SIGIL_NOVA: makeSigilSprite('nova'),
+  ITEM_SIGIL_NEEDLE: makeSigilSprite('needle'),
+  ITEM_SIGIL_DRILL: makeSigilSprite('drill'),
+  ITEM_SIGIL_RICOCHET: makeSigilSprite('ricochet'),
+  ITEM_SIGIL_MIRROR: makeSigilSprite('mirror'),
+  ITEM_SIGIL_HOMING: makeSigilSprite('homing'),
+  ITEM_SIGIL_SEEKER: makeSigilSprite('seeker'),
+  ITEM_SIGIL_BLAST: makeSigilSprite('blast'),
+  ITEM_SIGIL_HELLFIRE: makeSigilSprite('hellfire'),
+  ITEM_SIGIL_CHAIN: makeSigilSprite('chain'),
+  ITEM_SIGIL_STORM: makeSigilSprite('storm'),
+  ITEM_SIGIL_GRAVITY: makeSigilSprite('gravity'),
+  ITEM_SIGIL_ANCHOR: makeSigilSprite('anchor'),
+  ITEM_SIGIL_LASER: makeSigilSprite('laser'),
+  ITEM_SIGIL_CHARGE: makeSigilSprite('charge'),
+  ITEM_SIGIL_OVERCLOCK: makeSigilSprite('overclock'),
+  ITEM_SIGIL_CUBE: makeSigilSprite('cube'),
+  ITEM_SIGIL_SHARD: makeSigilSprite('shard'),
+  ITEM_SIGIL_RING: makeSigilSprite('ring'),
+  ITEM_SIGIL_BOLT: makeSigilSprite('bolt'),
+  ITEM_SIGIL_LUMEN: makeSigilSprite('lumen'),
+  ITEM_SIGIL_SUNSTONE: makeSigilSprite('sunstone'),
+  ITEM_SIGIL_ICE: makeSigilSprite('ice'),
+  ITEM_SIGIL_QUICK: makeSigilSprite('quicksilver'),
+  ITEM_SIGIL_ION: makeSigilSprite('ion'),
+  ITEM_SIGIL_FOCUS: makeSigilSprite('focus'),
+  ITEM_SIGIL_SPIRAL: makeSigilSprite('spiral'),
+  ITEM_SIGIL_BLOOM: makeSigilSprite('bloom'),
+  ITEM_SIGIL_POINT: makeSigilSprite('point'),
+  ITEM_SIGIL_RAZOR: makeSigilSprite('razor'),
+  ITEM_SIGIL_GAUNTLET: makeSigilSprite('gauntlet'),
+  ITEM_SIGIL_WIND: makeSigilSprite('wind'),
+  ITEM_SIGIL_DRUM: makeSigilSprite('drum'),
+  ITEM_SIGIL_CRESCENT: makeSigilSprite('crescent'),
+  ITEM_SIGIL_COMET: makeSigilSprite('comet'),
+  ITEM_SIGIL_SHOCK: makeSigilSprite('shock'),
+  ITEM_SIGIL_PLASMA: makeSigilSprite('plasma'),
+  ITEM_SIGIL_METEOR: makeSigilSprite('meteor'),
+  ITEM_SIGIL_STARFORGE: makeSigilSprite('starforge'),
+  ITEM_SIGIL_VOID: makeSigilSprite('void'),
+  ITEM_SIGIL_BLOOD: makeSigilSprite('blood'),
+  ITEM_SIGIL_HASTE: makeSigilSprite('haste'),
+  ITEM_SIGIL_FROST: makeSigilSprite('frost'),
+  ITEM_SIGIL_THUNDER: makeSigilSprite('thunder'),
+  ITEM_SIGIL_PHASE: makeSigilSprite('phase'),
+  ITEM_SIGIL_SPLITTER: makeSigilSprite('splitter'),
+  ITEM_SIGIL_SERPENT: makeSigilSprite('serpent'),
 };

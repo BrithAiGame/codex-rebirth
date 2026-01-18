@@ -62,6 +62,9 @@ export class GameEngine {
   onlineRng: SeededRNG | null = null;
   nextFloorPromptActive: boolean = false;
   trapdoorSuppress: boolean = false;
+  chargeTimer: number = 0;
+  chargeDir: Vector2 | null = null;
+  chargeActive: boolean = false;
 
   // Callback to sync React UI
   onUiUpdate: (stats: any) => void;
@@ -89,6 +92,9 @@ export class GameEngine {
     this.gameTimeSeconds = 0;
     this.baseSeed = Math.floor(Math.random() * 1000000); // Initial random seed for the run
     this.player = this.createPlayer(characterId);
+    this.chargeTimer = 0;
+    this.chargeActive = false;
+    this.chargeDir = null;
     this.loadFloor(1);
     this.status = GameStatus.PLAYING;
     this.restartTimer = 0;
@@ -104,6 +110,9 @@ export class GameEngine {
     this.gameTimeSeconds = 0;
     this.baseSeed = baseSeed;
     this.player = this.createPlayer(characterId);
+    this.chargeTimer = 0;
+    this.chargeActive = false;
+    this.chargeDir = null;
     this.loadFloor(1);
     this.status = GameStatus.PLAYING;
     this.restartTimer = 0;
@@ -1129,9 +1138,41 @@ export class GameEngine {
     this.resolveWallCollision(this.player);
 
     if (this.player.cooldown > 0) this.player.cooldown--;
-    if (effectiveInput.shoot && this.player.cooldown <= 0) {
-        this.spawnProjectile(this.player, effectiveInput.shoot);
+    const shotMode = this.player.stats.shotMode || 'normal';
+    if (shotMode === 'charge') {
+        if (effectiveInput.shoot) {
+            this.chargeActive = true;
+            this.chargeTimer = Math.min(1.4, this.chargeTimer + dt * Math.max(0.2, this.player.stats.chargeRate || 1));
+            this.chargeDir = effectiveInput.shoot;
+        } else if (this.chargeActive && this.player.cooldown <= 0) {
+            const chargeRatio = Math.min(1, this.chargeTimer / 0.9);
+            const dir = this.chargeDir || { x: 1, y: 0 };
+            const chargedStats = {
+                ...this.player.stats,
+                damage: this.player.stats.damage * (1 + chargeRatio * 1.5),
+                range: this.player.stats.range * (1 + chargeRatio * 0.6),
+                shotSpeed: this.player.stats.shotSpeed * (1 + chargeRatio * 0.4),
+                bulletScale: this.player.stats.bulletScale + chargeRatio * 0.4
+            };
+            this.spawnProjectileFromStats(this.player, dir, chargedStats, chargeRatio);
+            this.player.cooldown = Math.max(10, Math.round(this.player.stats.fireRate * (1.2 + chargeRatio)));
+            this.chargeTimer = 0;
+            this.chargeDir = null;
+            this.chargeActive = false;
+        }
+    } else if (shotMode === 'laser') {
+        if (effectiveInput.shoot && this.player.cooldown <= 0) {
+            const laserStats = { ...this.player.stats, bulletShape: 'laser', shotMode: 'laser' };
+            this.spawnProjectileFromStats(this.player, effectiveInput.shoot, laserStats);
+            this.player.cooldown = Math.max(8, Math.round(this.player.stats.fireRate * 0.9));
+        }
+    } else if (effectiveInput.shoot && this.player.cooldown <= 0) {
+        this.spawnProjectileFromStats(this.player, effectiveInput.shoot, this.player.stats);
         this.player.cooldown = this.player.stats.fireRate;
+    } else if (!effectiveInput.shoot) {
+        this.chargeActive = false;
+        this.chargeDir = null;
+        this.chargeTimer = 0;
     }
 
     if (effectiveInput.bomb) {
@@ -1284,27 +1325,49 @@ export class GameEngine {
   spawnProjectile(owner: PlayerEntity | EnemyEntity, dir: {x:number, y:number}) {
       const isPlayer = owner.type === EntityType.PLAYER;
       const stats = isPlayer ? (owner as PlayerEntity).stats : (owner as EnemyEntity).stats;
-      const speed = stats.shotSpeed; 
-      const damage = stats.damage;
-      const knockback = isPlayer ? (owner as PlayerEntity).stats.knockback : 0;
+      this.spawnProjectileFromStats(owner, dir, stats);
+  }
+
+  spawnProjectileFromStats(owner: PlayerEntity | EnemyEntity, dir: {x:number, y:number}, stats: Partial<Stats>, chargeLevel?: number) {
+      const isPlayer = owner.type === EntityType.PLAYER;
+      const speed = Math.max(0.6, stats.shotSpeed ?? 2);
+      const damage = stats.damage ?? 1;
+      const knockback = isPlayer ? (stats.knockback ?? 1) : 0;
+      const range = Math.max(120, stats.range ?? 260);
+      const bulletScale = stats.bulletScale ?? 1;
+      const shotSpread = stats.shotSpread ?? 1;
+      const baseShape = isPlayer ? (stats.bulletShape ?? 'orb') : 'orb';
+      const shotMode = stats.shotMode ?? 'normal';
+      const shape = shotMode === 'laser' ? 'laser' : baseShape;
+      const pierce = Math.max(0, stats.pierce ?? 0);
+      const bounce = Math.max(0, stats.bounce ?? 0);
+      const homing = Math.max(0, stats.homing ?? 0);
+      const explosive = Math.max(0, stats.explosive ?? 0);
+      const chain = Math.max(0, stats.chain ?? 0);
+      const gravityScale = stats.gravityScale ?? 0;
+      const impactDamage = stats.impactDamage ?? 0;
+
       let baseSize = CONSTANTS.PROJECTILE_SIZE;
       if (!isPlayer) {
           baseSize *= 2.1;
-      }
-      if (isPlayer) {
+      } else {
           const dmgFactor = Math.max(1, damage / 3.5);
           baseSize = baseSize * dmgFactor;
-          baseSize *= (owner as PlayerEntity).stats.bulletScale;
+          baseSize *= bulletScale;
       }
-      const range = stats.range;
-      
+      if (shape === 'laser') {
+          baseSize *= 1.2;
+      }
+
       const pushProj = (vx: number, vy: number) => {
-          this.entities.push({
+          const lifeTime = range;
+          const projectile: ProjectileEntity = {
               id: uuid(),
               type: EntityType.PROJECTILE,
               x: owner.x + owner.w/2 - baseSize/2,
               y: owner.y + owner.h/2 - baseSize/2,
-              w: baseSize, h: baseSize,
+              w: baseSize,
+              h: baseSize,
               velocity: { x: vx * speed, y: vy * speed },
               knockbackVelocity: { x: 0, y: 0 },
               color: isPlayer ? CONSTANTS.COLORS.PROJECTILE_FRIENDLY : CONSTANTS.COLORS.PROJECTILE_ENEMY,
@@ -1312,83 +1375,118 @@ export class GameEngine {
               ownerId: owner.id,
               damage,
               knockback,
-              lifeTime: range,
-              initialRange: range,
-              visualZ: 10
-          } as ProjectileEntity);
+              lifeTime,
+              initialRange: lifeTime,
+              visualZ: 10,
+              shape,
+              pierce,
+              bounce,
+              homing,
+              explosive,
+              chain,
+              gravityScale,
+              impactDamage,
+              laserLength: shape === 'laser' ? Math.max(1.1, range / 220) : undefined,
+              chargeLevel
+          };
+          this.entities.push(projectile);
       };
 
-      if (!isPlayer || (owner as PlayerEntity).stats.shotSpread === 1) {
+      if (!isPlayer || shotSpread <= 1) {
           pushProj(dir.x, dir.y);
-      } else {
-          const angle = Math.atan2(dir.y, dir.x);
-          const spreadRad = 15 * (Math.PI / 180);
-          const pStats = (owner as PlayerEntity).stats;
-          if (pStats.shotSpread === 3) {
-              const angles = [angle - spreadRad, angle, angle + spreadRad];
-              angles.forEach(a => pushProj(Math.cos(a), Math.sin(a)));
-          }
-          else if (pStats.shotSpread === 4) {
-              const angles = [angle - spreadRad * 1.5, angle - spreadRad * 0.5, angle + spreadRad * 0.5, angle + spreadRad * 1.5];
-              angles.forEach(a => pushProj(Math.cos(a), Math.sin(a)));
-          }
+          return;
+      }
+
+      const count = Math.max(2, Math.round(shotSpread));
+      const angle = Math.atan2(dir.y, dir.x);
+      const totalSpread = Math.min(Math.PI / 2, (count - 1) * 0.18);
+      const start = angle - totalSpread / 2;
+      const step = count === 1 ? 0 : totalSpread / (count - 1);
+      for (let i = 0; i < count; i += 1) {
+          const a = start + step * i;
+          pushProj(Math.cos(a), Math.sin(a));
       }
   }
 
-  spawnRemoteProjectile(x: number, y: number, dir: Vector2, stats: Pick<Stats, 'damage' | 'fireRate' | 'shotSpeed' | 'range' | 'knockback' | 'shotSpread' | 'bulletScale'>) {
-      const speed = stats.shotSpeed;
-      const damage = stats.damage;
-      const knockback = stats.knockback;
-      let baseSize = CONSTANTS.PROJECTILE_SIZE;
-      const dmgFactor = Math.max(1, damage / 3.5);
-      baseSize = baseSize * dmgFactor;
-      baseSize *= stats.bulletScale;
-      const range = stats.range;
-
-      const pushProj = (dx: number, dy: number) => {
-          this.entities.push({
-              id: uuid(),
-              type: EntityType.PROJECTILE,
-              x: x - baseSize / 2,
-              y: y - baseSize / 2,
-              w: baseSize,
-              h: baseSize,
-              velocity: { x: dx * speed, y: dy * speed },
-              knockbackVelocity: { x: 0, y: 0 },
-              color: CONSTANTS.COLORS.PROJECTILE_FRIENDLY,
-              markedForDeletion: false,
-              ownerId: 'player',
-              damage,
-              knockback,
-              lifeTime: range,
-              initialRange: range,
-              visualZ: 10
-          } as ProjectileEntity);
+  spawnRemoteProjectile(x: number, y: number, dir: Vector2, stats: Partial<Stats>) {
+      const ghost: PlayerEntity = {
+          id: 'player',
+          type: EntityType.PLAYER,
+          x: x - 16,
+          y: y - 16,
+          w: 32,
+          h: 32,
+          velocity: { x: 0, y: 0 },
+          knockbackVelocity: { x: 0, y: 0 },
+          color: '#ffffff',
+          markedForDeletion: false,
+          stats: stats as Stats,
+          cooldown: 0,
+          invincibleTimer: 0,
+          inventory: [],
+          keys: 0,
+          bombs: 0,
+          visualZ: 0
       };
-
-      const spread = stats.shotSpread ?? 1;
-      if (spread === 1) {
-          pushProj(dir.x, dir.y);
-          return;
-      }
-      const angle = Math.atan2(dir.y, dir.x);
-      const spreadRad = 15 * (Math.PI / 180);
-      if (spread === 3) {
-          const angles = [angle - spreadRad, angle, angle + spreadRad];
-          angles.forEach(a => pushProj(Math.cos(a), Math.sin(a)));
-          return;
-      }
-      if (spread === 4) {
-          const angles = [angle - spreadRad * 1.5, angle - spreadRad * 0.5, angle + spreadRad * 0.5, angle + spreadRad * 1.5];
-          angles.forEach(a => pushProj(Math.cos(a), Math.sin(a)));
-          return;
-      }
-      pushProj(dir.x, dir.y);
+      this.spawnProjectileFromStats(ghost, dir, stats);
   }
 
   updateProjectile(p: ProjectileEntity) {
+      const speed = Math.hypot(p.velocity.x, p.velocity.y) || 1;
+      if (p.homing && p.ownerId === 'player') {
+          const targets = this.entities.filter(e => e.type === EntityType.ENEMY && !e.markedForDeletion) as EnemyEntity[];
+          if (targets.length > 0) {
+              let nearest = targets[0];
+              let best = distance(p, nearest);
+              for (let i = 1; i < targets.length; i += 1) {
+                  const d = distance(p, targets[i]);
+                  if (d < best) {
+                      best = d;
+                      nearest = targets[i];
+                  }
+              }
+              const desired = normalizeVector({ x: (nearest.x + nearest.w / 2) - (p.x + p.w / 2), y: (nearest.y + nearest.h / 2) - (p.y + p.h / 2) });
+              const current = normalizeVector(p.velocity);
+              const steer = p.homing;
+              const blended = normalizeVector({
+                  x: current.x * (1 - steer) + desired.x * steer,
+                  y: current.y * (1 - steer) + desired.y * steer
+              });
+              p.velocity.x = blended.x * speed;
+              p.velocity.y = blended.y * speed;
+          }
+      }
+
+      if (p.gravityScale) {
+          p.velocity.y += p.gravityScale;
+      }
+
+      const oldX = p.x;
+      const oldY = p.y;
+      let hitX = false;
+      let hitY = false;
       p.x += p.velocity.x;
+      if (this.checkCollision(p)) {
+          p.x = oldX;
+          hitX = true;
+      }
       p.y += p.velocity.y;
+      if (this.checkCollision(p)) {
+          p.y = oldY;
+          hitY = true;
+      }
+
+      if (hitX || hitY) {
+          if ((p.bounce ?? 0) > 0) {
+              if (hitX) p.velocity.x = -p.velocity.x;
+              if (hitY) p.velocity.y = -p.velocity.y;
+              p.bounce = Math.max(0, (p.bounce ?? 0) - 1);
+          } else {
+              p.markedForDeletion = true;
+              return;
+          }
+      }
+
       p.lifeTime -= Math.abs(p.velocity.x) + Math.abs(p.velocity.y); 
       const dropThreshold = Math.max(30, (p.initialRange ?? p.lifeTime) * 0.25);
       if (p.lifeTime < dropThreshold) {
@@ -1399,18 +1497,44 @@ export class GameEngine {
           p.markedForDeletion = true;
           return;
       }
-      if (this.checkWallCollision(p)) {
-          p.markedForDeletion = true;
-          return;
-      }
+
       if (p.fxOnly) return;
+      const totalDamage = p.damage + (p.impactDamage ?? 0);
       if (p.ownerId === 'player') {
-           const enemies = this.entities.filter(e => e.type === EntityType.ENEMY);
+           const enemies = this.entities.filter(e => e.type === EntityType.ENEMY && !e.markedForDeletion) as EnemyEntity[];
            for (const enemy of enemies) {
                if (checkAABB(p, enemy)) {
-                   p.markedForDeletion = true;
                    const hitDir = normalizeVector(p.velocity);
-                   this.damageEnemy(enemy as EnemyEntity, p.damage, p.knockback, hitDir);
+                   this.damageEnemy(enemy as EnemyEntity, totalDamage, p.knockback, hitDir);
+                   if ((p.explosive ?? 0) > 0) {
+                       const radius = p.explosive ?? 0;
+                       for (const other of enemies) {
+                           if (other === enemy) continue;
+                           if (distance(other, p) <= radius) {
+                               this.damageEnemy(other as EnemyEntity, Math.max(1, Math.floor(totalDamage * 0.6)), 0, hitDir);
+                           }
+                       }
+                   }
+                   if ((p.chain ?? 0) > 0) {
+                       const chainTargets = enemies.filter(e => e !== enemy);
+                       if (chainTargets.length > 0) {
+                           let nearest = chainTargets[0];
+                           let best = distance(nearest, enemy);
+                           for (let i = 1; i < chainTargets.length; i += 1) {
+                               const d = distance(chainTargets[i], enemy);
+                               if (d < best) {
+                                   best = d;
+                                   nearest = chainTargets[i];
+                               }
+                           }
+                           this.damageEnemy(nearest as EnemyEntity, Math.max(1, Math.floor(totalDamage * 0.7)), 0, hitDir);
+                       }
+                   }
+                   if ((p.pierce ?? 0) > 0) {
+                       p.pierce = Math.max(0, (p.pierce ?? 0) - 1);
+                       return;
+                   }
+                   p.markedForDeletion = true;
                    return;
                }
            }
@@ -2051,7 +2175,23 @@ export class GameEngine {
       if (s.range) pStats.range *= s.range;
       if (s.bulletScale) pStats.bulletScale += s.bulletScale;
       if (s.knockback) pStats.knockback *= s.knockback;
-      if (s.shotSpread) pStats.shotSpread = s.shotSpread;
+      if (s.shotSpread) {
+          if (pStats.shotSpread > 1 && s.shotSpread > 1) {
+              pStats.shotSpread = Math.min(9, pStats.shotSpread + s.shotSpread);
+          } else {
+              pStats.shotSpread = s.shotSpread;
+          }
+      }
+      if (s.bulletShape) pStats.bulletShape = s.bulletShape;
+      if (s.shotMode) pStats.shotMode = s.shotMode;
+      if (s.pierce) pStats.pierce = Math.max(0, pStats.pierce + s.pierce);
+      if (s.bounce) pStats.bounce = Math.max(0, pStats.bounce + s.bounce);
+      if (s.homing) pStats.homing = Math.max(0, pStats.homing + s.homing);
+      if (s.explosive) pStats.explosive = Math.max(0, pStats.explosive + s.explosive);
+      if (s.chain) pStats.chain = Math.max(0, pStats.chain + s.chain);
+      if (s.gravityScale) pStats.gravityScale += s.gravityScale;
+      if (s.chargeRate) pStats.chargeRate = Math.max(0.2, pStats.chargeRate + s.chargeRate);
+      if (s.impactDamage) pStats.impactDamage += s.impactDamage;
 
       if (item.costHearts && item.costHearts > 0) {
           pStats.maxHp = Math.max(1, pStats.maxHp - item.costHearts);
@@ -2062,6 +2202,7 @@ export class GameEngine {
       if (pStats.maxHp < 1) pStats.maxHp = 1;
       if (pStats.hp > pStats.maxHp) pStats.hp = pStats.maxHp;
       if (pStats.fireRate < 5) pStats.fireRate = 5;
+      if (pStats.bulletScale < 0.1) pStats.bulletScale = 0.1;
   }
 
   damageEnemy(enemy: EnemyEntity, damage: number, knockback: number, hitDir: Vector2) {
