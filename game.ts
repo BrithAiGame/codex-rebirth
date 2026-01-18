@@ -170,6 +170,13 @@ export class GameEngine {
     this.floorThemeId = fixedThemeId !== undefined ? fixedThemeId : null;
     this.floorThemeLabel = fixedThemeId !== undefined ? (ROOM_THEMES[fixedThemeId]?.label || '???') : '???';
     this.dungeon = generateDungeon(level, floorSeed, roomCount, fixedThemeId);
+    this.dungeon.forEach((room) => {
+        if (room.type === 'HIDDEN') {
+            const cx = CONSTANTS.CANVAS_WIDTH / 2;
+            const cy = CONSTANTS.CANVAS_HEIGHT / 2;
+            this.buildHiddenRoomEntities(room, cx, cy);
+        }
+    });
     
     const startRoom = this.dungeon.find(r => r.type === 'START');
     if (startRoom) {
@@ -256,7 +263,9 @@ export class GameEngine {
     // 2. Restore Saved Entities (Items, Pedestals, etc.)
     if (room.savedEntities && room.savedEntities.length > 0) {
         this.entities.push(...room.savedEntities);
-    } 
+    } else if (room.preSpawnEntities && room.preSpawnEntities.length > 0) {
+        this.entities.push(...room.preSpawnEntities.map(e => ({ ...e })));
+    }
     // 3. Initial Generation (If not visited)
     else if (!room.visited) {
         // Spawn Item if Item Room
@@ -268,6 +277,9 @@ export class GameEngine {
         }
         if (room.type === 'DEVIL') {
             this.spawnDevilItems(cx, cy, room.seed);
+        }
+        if (room.type === 'HIDDEN') {
+            // Hidden room items are pre-generated on map init.
         }
         
         // Spawn Boss (Initial Fight)
@@ -583,6 +595,89 @@ export class GameEngine {
           };
           this.entities.push(item);
       }
+  }
+
+  spawnHiddenItems(x: number, y: number, seed?: number) {
+      const baseSeed = this.currentRoom ? this.currentRoom.seed : this.baseSeed;
+      const fallbackSeed = baseSeed + Math.floor(x) * 23 + Math.floor(y) * 31;
+      const rng = seed !== undefined
+          ? new SeededRNG(seed + 333)
+          : new SeededRNG(fallbackSeed + 333);
+      const spacing = 70;
+      const startX = x - spacing;
+      const choiceId = `hidden_${this.floorLevel}_${Math.floor((seed ?? fallbackSeed) * 1000)}`;
+      for (let i = 0; i < 3; i++) {
+          this.spawnPedestal(startX + i * spacing, y);
+          const config = rng.weightedChoice(ITEMS);
+          if (!config) continue;
+          const itemSeed = seed !== undefined ? seed + i * 17 : fallbackSeed + i * 17;
+          const id = this.onlineMode ? this.makeItemId('hidden', itemSeed, startX + i * spacing, y, config.type) : uuid();
+          const item: ItemEntity = {
+              id,
+              type: EntityType.ITEM,
+              x: startX + i * spacing - CONSTANTS.ITEM_SIZE/2,
+              y: y - CONSTANTS.ITEM_SIZE/2,
+              w: CONSTANTS.ITEM_SIZE,
+              h: CONSTANTS.ITEM_SIZE,
+              velocity: {x:0, y:0},
+              knockbackVelocity: { x: 0, y: 0 },
+              color: config.color,
+              markedForDeletion: false,
+              itemType: config.type,
+              name: config.nameKey,
+              description: config.descKey,
+              choiceGroupId: choiceId,
+              visualZ: 10
+          };
+          this.entities.push(item);
+      }
+  }
+
+  buildHiddenRoomEntities(room: Room, x: number, y: number) {
+      const seed = room.seed;
+      const baseSeed = room.seed + 333;
+      const rng = new SeededRNG(baseSeed);
+      const spacing = 70;
+      const startX = x - spacing;
+      const choiceId = `hidden_${this.floorLevel}_${Math.floor(seed * 1000)}`;
+      const entities: Entity[] = [];
+      for (let i = 0; i < 3; i++) {
+          const px = startX + i * spacing;
+          entities.push({
+              id: uuid(),
+              type: EntityType.PEDESTAL,
+              x: px - CONSTANTS.ITEM_SIZE/2,
+              y: y - CONSTANTS.ITEM_SIZE/2 + 8,
+              w: CONSTANTS.ITEM_SIZE,
+              h: CONSTANTS.ITEM_SIZE,
+              velocity: {x:0, y:0},
+              knockbackVelocity: {x:0, y:0},
+              color: CONSTANTS.COLORS.PEDESTAL,
+              markedForDeletion: false
+          } as Entity);
+          const config = rng.weightedChoice(ITEMS);
+          if (!config) continue;
+          const itemSeed = seed + i * 17;
+          const id = this.onlineMode ? this.makeItemId('hidden', itemSeed, px, y, config.type) : uuid();
+          entities.push({
+              id,
+              type: EntityType.ITEM,
+              x: px - CONSTANTS.ITEM_SIZE/2,
+              y: y - CONSTANTS.ITEM_SIZE/2,
+              w: CONSTANTS.ITEM_SIZE,
+              h: CONSTANTS.ITEM_SIZE,
+              velocity: {x:0, y:0},
+              knockbackVelocity: { x: 0, y: 0 },
+              color: config.color,
+              markedForDeletion: false,
+              itemType: config.type,
+              name: config.nameKey,
+              description: config.descKey,
+              choiceGroupId: choiceId,
+              visualZ: 10
+          } as ItemEntity);
+      }
+      room.preSpawnEntities = entities;
   }
   
   spawnPickup(x: number, y: number) {

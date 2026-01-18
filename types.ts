@@ -204,6 +204,7 @@ export interface Room {
   doorAnim?: { state: 'closing' | 'closed' | 'opening' | 'open'; t: number };
   forcedOpen?: boolean;
   savedEntities?: Entity[]; // Persist items, pedestals, trapdoors
+  preSpawnEntities?: Entity[];
 }
 
 export interface GameState {

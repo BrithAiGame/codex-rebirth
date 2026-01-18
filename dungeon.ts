@@ -270,7 +270,8 @@ export const generateDungeon = (floorLevel: number, seed: number, targetRoomCoun
       layout,
       visited: false,
       seed: rng.next() * 1000000, // Unique seed for this room
-      themeId
+      themeId,
+      preSpawnEntities: []
     });
   });
 

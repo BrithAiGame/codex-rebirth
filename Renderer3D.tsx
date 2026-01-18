@@ -589,23 +589,9 @@ const ProjectileField: React.FC<{ engine: GameEngine }> = React.memo(({ engine }
     const friendlyRef = useRef<THREE.InstancedMesh>(null);
     const enemyRef = useRef<THREE.InstancedMesh>(null);
     const dummy = useMemo(() => new THREE.Object3D(), []);
-    const geometry = useMemo(() => new THREE.SphereGeometry(0.5, 8, 8), []);
-    const friendlyMat = useMemo(() => new THREE.MeshStandardMaterial({
-        color: CONSTANTS.COLORS.PROJECTILE_FRIENDLY,
-        emissive: new THREE.Color(CONSTANTS.COLORS.PROJECTILE_FRIENDLY),
-        emissiveIntensity: 0.7,
-        metalness: 0.2,
-        roughness: 0.35,
-        toneMapped: false
-    }), []);
-    const enemyMat = useMemo(() => new THREE.MeshStandardMaterial({
-        color: CONSTANTS.COLORS.PROJECTILE_ENEMY,
-        emissive: new THREE.Color(CONSTANTS.COLORS.PROJECTILE_ENEMY),
-        emissiveIntensity: 0.6,
-        metalness: 0.2,
-        roughness: 0.4,
-        toneMapped: false
-    }), []);
+    const geometry = useMemo(() => new THREE.SphereGeometry(0.5, 6, 6), []);
+    const friendlyMat = useMemo(() => new THREE.MeshBasicMaterial({ color: CONSTANTS.COLORS.PROJECTILE_FRIENDLY, toneMapped: false }), []);
+    const enemyMat = useMemo(() => new THREE.MeshBasicMaterial({ color: CONSTANTS.COLORS.PROJECTILE_ENEMY, toneMapped: false }), []);
 
     useFrame(() => {
         let friendlyCount = 0;
